@@ -91,7 +91,7 @@ def load_image_array(img_file):
 	:return: float image (in the [0,1] range) on CxHxW layout
 	"""
 	img = Image.open(img_file, 'r').convert('RGB')
-	img = np.asarray(img).astype(np.float32)
+	img = np.asarray(img).astype(float32)
 	img = HWCtoCHW(img)
 	img = img / 255.0
 	return img
@@ -114,7 +114,7 @@ def read_exr(filename):
 	# Convert all channels in the image to numpy arrays
 	for c in header['channels']:
 		C = exrfile.channel(c, Imath.PixelType(Imath.PixelType.FLOAT))
-		C = np.frombuffer(C, dtype=np.float32)
+		C = np.frombuffer(C, dtype=float32)
 		C = np.reshape(C, isize)
 
 		channelData[c] = C

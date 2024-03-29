@@ -76,7 +76,7 @@ class AlphaGridMask(torch.nn.Module):
         return (xyz_sampled-self.aabb[0]) * self.invgridSize - 1
 
 
-class MLPRender_Fea(torch.nn.Module):
+class MLPRender_Fea(torch.nn.Module): #feature를 MLP로 렌더링, positional encoding 사용, 정적인 복셀 학습할 때 MLP 3layer 사용
     def __init__(self,inChanel, viewpe=6, feape=6, featureC=128):
         super(MLPRender_Fea, self).__init__()
 
@@ -102,7 +102,7 @@ class MLPRender_Fea(torch.nn.Module):
 
         return rgb
 
-class MLPRender_PE(torch.nn.Module):
+class MLPRender_PE(torch.nn.Module): #positional encoding 하고 MLP로 렌더링
     def __init__(self,inChanel, viewpe=6, pospe=6, featureC=128):
         super(MLPRender_PE, self).__init__()
         print('Using MLPRender_PE')
@@ -128,7 +128,7 @@ class MLPRender_PE(torch.nn.Module):
 
         return rgb
 
-class MLPRender(torch.nn.Module):
+class MLPRender(torch.nn.Module): #그냥 MLP로 렌더링
     def __init__(self,inChanel, viewpe=6, featureC=128):
         super(MLPRender, self).__init__()
 
@@ -360,7 +360,8 @@ class MixVoxels(torch.nn.Module):
             self.alphaMask = AlphaGridMask(self.device, ckpt['alphaMask.aabb'].to(self.device), alpha_volume.float().to(self.device))
         self.load_state_dict(ckpt['state_dict'])
 
-    def sample_ray_ndc(self, rays_o, rays_d, is_train=True, N_samples=-1):
+    def sample_ray_ndc(self, rays_o, rays_d, is_train=True, N_samples=-1): #ray를 N_samples개로 sampling해서 point위치 반환
+                                                                        #하나의 ray를 대상으로 sampling해서 각 point를 3D 텐서로 반환
         N_samples = N_samples if N_samples > 0 else self.nSamples
         near, far = self.near_far
         interpx = torch.linspace(near, far, N_samples).unsqueeze(0).to(rays_o)
@@ -371,7 +372,7 @@ class MixVoxels(torch.nn.Module):
         mask_outbbox = ((self.aabb[0] > rays_pts) | (rays_pts > self.aabb[1])).any(dim=-1)
         return rays_pts, interpx, ~mask_outbbox
 
-    def sample_ray(self, rays_o, rays_d, is_train=True, N_samples=-1):
+    def sample_ray(self, rays_o, rays_d, is_train=True, N_samples=-1): #ndc를 사용하지 않은 경우 sampling 하는 함수
         N_samples = N_samples if N_samples>0 else self.nSamples
         stepsize = self.stepSize
         near, far = self.near_far
@@ -396,7 +397,7 @@ class MixVoxels(torch.nn.Module):
         pass
 
     @torch.no_grad()
-    def getDenseAlpha(self,gridSize=None):
+    def getDenseAlpha(self,gridSize=None): # 전체 그리드를 대상으로 alpha와 dense를 계산
         gridSize = self.gridSize if gridSize is None else gridSize
 
         samples = torch.stack(torch.meshgrid(
@@ -410,7 +411,7 @@ class MixVoxels(torch.nn.Module):
         # print(self.stepSize, self.distance_scale*self.aabbDiag)
         alpha = torch.zeros_like(dense_xyz[...,0])
         for i in range(gridSize[0]):
-            alpha[i] = self.compute_alpha(dense_xyz[i].view(-1,3), self.stepSize).view((gridSize[1], gridSize[2]))
+            alpha[i] = self.compute_alpha(dense_xyz[i].view(-1,3), self.stepSize).view((gridSize[1], gridSize[2])) #모든 그리드 점을 대상으로 alpha 계산
         return alpha, dense_xyz
 
     @torch.no_grad()
@@ -511,7 +512,7 @@ class MixVoxels(torch.nn.Module):
     def compute_alpha(self, xyz_locs, length=1):
         return self.compute_mean_alpha(xyz_locs, length)
 
-    def compute_temporal_alpha(self, xyz_locs, length=1):
+    def compute_temporal_alpha(self, xyz_locs, length=1): #모든 time step에서 특정한 xyz 좌표에 대해서 alpha 계산 -> 이거는 variation field 만들 때 쓰이는 거 같음(?)
         if self.alphaMask is not None:
             alphas = self.alphaMask.sample_alpha(xyz_locs)
             alpha_mask = alphas > 0
@@ -522,11 +523,13 @@ class MixVoxels(torch.nn.Module):
 
         xyz_sampled = self.normalize_coord(xyz_locs)
 
+        #compute_dynamics는 dynamic plane, dynamic line을 대상으로 feature 하나 계산하는 함수
         dynamic_prediction = self.compute_dynamics(xyz_sampled) # -1
-        dynamic_mask = torch.sigmoid(dynamic_prediction) > self.dynamic_threshold
+        dynamic_mask = torch.sigmoid(dynamic_prediction) > self.dynamic_threshold #임계값 못넘으면 마스크 씌우는 거
 
         sigma = torch.zeros((xyz_sampled.shape[0], self.n_frames), device=xyz_sampled.device, dtype=(torch.float16 if self.amp else torch.float32))
         ray_valid = alpha_mask & dynamic_mask
+        #any(): 주어진 텐서중 하나라도 참이면 Ture를 반환, otheriwse False 반환
         if ray_valid.any():
             sigma_feature = self.compute_densityfeature(xyz_sampled[ray_valid])
             sigma_feature = self.renderDenModule(features=sigma_feature, temporal_mask=None, temporal_indices=None)
@@ -544,8 +547,8 @@ class MixVoxels(torch.nn.Module):
 
         return alpha, sigma
 
-    def compute_mean_alpha(self, xyz_locs, length=1, return_density=False):
-        if self.alphaMask is not None:
+    def compute_mean_alpha(self, xyz_locs, length=1, return_density=False): #하나의 point를 대상으로 알파값(밀도의 역수?) 계산
+        if self.alphaMask is not None: # 만약 투명도가 0보다 크면 마스크 씌워서 계산 안함
             alphas = self.alphaMask.sample_alpha(xyz_locs)
             alpha_mask = alphas > 0
         else:
@@ -565,21 +568,22 @@ class MixVoxels(torch.nn.Module):
         return alpha
 
     def forward_dynamics(self, rays_chunk, variance_train, is_train=False, ndc_ray=False, N_samples=-1, rgb_train=None):
+        
         # sample points
         xyz_sampled, z_vals, ray_valid, dists, viewdirs = self.sampling_points(rays_chunk, ndc_ray, is_train, N_samples)
         xyz_sampled = self.normalize_coord(xyz_sampled)
 
         # calculate pixel variance for weighted sampling
         if variance_train is None:
-            variance = rgb_train.std(dim=1, unbiased=False).mean(dim=1).to(xyz_sampled)
+            variance = rgb_train.std(dim=1, unbiased=False).mean(dim=1).to(xyz_sampled) #픽셀의 표준편차(?) 구하기
         else:
             variance = variance_train.to(xyz_sampled)
 
-        dynamics_supervision = variance > self.temporal_variance_threshold
+        dynamics_supervision = variance > self.temporal_variance_threshold #픽셀의 분산이 임계값보다 높은지 확인, 1 or 0
 
         Nr, ns, nc = xyz_sampled.shape
         dynamic_prediction = self.compute_dynamics(xyz_sampled.reshape((Nr * ns, nc))).reshape(Nr, ns)
-        max_dynamic_prediction = dynamic_prediction.max(dim=1)[0]
+        max_dynamic_prediction = dynamic_prediction.max(dim=1)[0]#variation field 만들 때 max 연산하는 부분
         if self.dynamic_use_volumetric_render:
             static_sigma = torch.zeros(*xyz_sampled.shape[:2], device=xyz_sampled.device, dtype=(torch.float32 if self.amp else torch.float32))
             if ray_valid.any():
@@ -597,7 +601,6 @@ class MixVoxels(torch.nn.Module):
     def inference_dynamics(self, xyz_sampled, dists=None, dynamic_granularity='ray_wise'):
         Nr, ns, nc = xyz_sampled.shape
         dynamic_prediction = self.compute_dynamics(xyz_sampled.reshape((Nr * ns, nc))).reshape(Nr, ns)
-
         ray_wise_dynamic_prediction = dynamic_prediction.max(dim=1)[0]
         if self.dynamic_use_volumetric_render:
             # static branch
@@ -669,29 +672,31 @@ class MixVoxels(torch.nn.Module):
         return xyz_sampled, z_vals, ray_valid, dists, viewdirs
 
     def generate_temporal_mask(self, rgb_train, variance_train, xyz_sampled, dists, temporal_indices, dynamic_granularity='ray_wise'):
+        #이게 xyz 포인터가 동적인지 정적인지 마스크 씌우는 함수
         Nr, ns, nc = xyz_sampled.shape
         num_frames = self.n_frames if temporal_indices is None else self.n_train_frames
         if rgb_train is not None:
             # calculate pixel variance for weighted sampling
             if variance_train is None:
-                variance = rgb_train.std(dim=1, unbiased=False).mean(dim=1).to(self.device)
+                variance = rgb_train.std(dim=1, unbiased=False).mean(dim=1).to(self.device) #픽셀 분산 구하기
             else:
                 variance = variance_train.to(self.device)
-            temporal_mask = variance > self.temporal_variance_threshold
-            dynamics_supervision = temporal_mask
+            temporal_mask = variance > self.temporal_variance_threshold #분산이 임계값보다 높으면 마스크를 씌워서 동적인 부분으로 구별함
+            dynamics_supervision = temporal_mask #rgb_train이 있으면 마스크를 그냥 동적/정적 부분 구별하는 것으로 사용
             temporal_mask = temporal_mask.unsqueeze(dim=1).expand(-1, ns)
             dynamic_prediction = None
         else:
             temporal_mask, dynamic_prediction = self.inference_dynamics(xyz_sampled, dists=dists, dynamic_granularity=dynamic_granularity)
-            if dynamic_granularity == 'ray_wise':
+            if dynamic_granularity == 'ray_wise': #rgb_train이 없으면(즉 훈련데이터 셋에서 없는 view 이면) inference함
                 temporal_mask = temporal_mask.unsqueeze(dim=1).expand(-1, xyz_sampled.shape[1])
-            dynamics_supervision = None
+            dynamics_supervision = None #rgb_train이 없으면 이 view에서는 동적/정적 구별하는 것으로 사용하지 않는다. 
         temporal_mask = temporal_mask.unsqueeze(dim=-1).expand(-1, -1, num_frames)
         ray_wise_temporal_mask = temporal_mask.any(dim=1)
 
         return temporal_mask, dynamic_prediction, dynamics_supervision, ray_wise_temporal_mask
 
     def forward_static_branch(self, rays_chunk, xyz_sampled, z_vals, dists, ray_valid, viewdirs, white_bg, is_train, remove_foreground=False):
+        #이게 static_branch  학습
         # =======================static branch=====================
         static_sigma = torch.zeros(*xyz_sampled.shape[:2], device=xyz_sampled.device, dtype=(torch.float32 if self.amp else torch.float32))
         static_rgb = torch.zeros((*xyz_sampled.shape[:2], 3), device=xyz_sampled.device, dtype=(torch.float16 if self.amp else torch.float32))
@@ -717,7 +722,10 @@ class MixVoxels(torch.nn.Module):
             static_app_features = self.compute_static_app(xyz_sampled[static_app_mask])
             valid_static_rgbs = self.renderStaticModule(xyz_sampled[static_app_mask], viewdirs[static_app_mask],
                                                         static_app_features)
+
+            
             static_rgb[static_app_mask] = valid_static_rgbs
+
 
         static_acc_map = torch.sum(static_weight, dim=1)
         static_rgb_map = torch.sum(static_weight[..., None] * static_rgb, dim=1)
@@ -733,6 +741,7 @@ class MixVoxels(torch.nn.Module):
     def forward_seperatly(self, rays_chunk, std_train, white_bg=True, is_train=False, ndc_ray=False, N_samples=-1,
                           rgb_train=None, composite_by_points=False, temporal_indices=None, diff_calc=False,
                           render_path=False, nodepth=False):
+        #이게 static_branch + dynamic_branch 학습
         timing = dict()
         _t = time.time()
         # if self.dynamic_granularity == 'point_wise':
@@ -781,8 +790,11 @@ class MixVoxels(torch.nn.Module):
             if self.time_head == 'forrier':
                 sigma_feature, point_wise_frequencies = self.renderDenModule(features=sigma_feature, temporal_mask=None, temporal_indices=masked_temporal_indices)
             else:
+            
                 sigma_feature = self.renderDenModule(features=sigma_feature, temporal_mask=None, temporal_indices=masked_temporal_indices)
             validsigma = self.feature2density(sigma_feature)
+            
+
             sigma[ray_valid] = validsigma
             # if self.time_head == 'forrier':
             #     frequency_weight[ray_valid] = point_wise_frequencies
@@ -884,6 +896,7 @@ class MixVoxels(torch.nn.Module):
             if self.time_head == 'forrier':
                 valid_rgbs, point_wise_rgb_frequencies = valid_rgbs
             #     frequency_weight_rgb[app_spatio_mask] = point_wise_rgb_frequencies
+            
             rgb[app_spatio_mask] = valid_rgbs
 
         # if self.time_head == 'forrier' and is_train and app_spatio_mask.any():
@@ -918,7 +931,7 @@ class MixVoxels(torch.nn.Module):
         # acc_map = torch.sum(weight, dim=1)
         # substitute of the above commented code
         acc_map = torch.zeros((xyz_sampled.shape[0], num_frames), device=xyz_sampled.device, dtype=(torch.float32))
-        acc_map[ray_mask] = torch.sum(weight[ray_mask], dim=1)
+        acc_map[ray_mask] = torch.sum(weight[ray_mask], dim=1) 
         acc_map[~ray_mask] = static_acc_map.detach()[~ray_mask].unsqueeze(dim=-1)
 
 

@@ -30,7 +30,7 @@ def generate_temporal_mask(temporal_mask, n_frames=300, n_frame_for_static=2):
     return detail_temporal_mask
 
 
-class DyRender(torch.nn.Module):
+class DyRender(torch.nn.Module): #이게 time embedding(wt)에 관련된 클래스
     def __init__(self, inChanel, viewpe=6, using_view=False, n_time_embedding=6,
                  total_time=300, featureD=128, time_embedding_type='abs'):
         super(DyRender, self).__init__()
@@ -41,8 +41,8 @@ class DyRender(torch.nn.Module):
         self.time_embedding_type = time_embedding_type
         self.using_view = using_view
         self.time_pos_encoding = torch.nn.Parameter(
-            0.1 * torch.randn(total_time, n_time_embedding)
-        )
+            0.1 * torch.randn(total_time, n_time_embedding) # 무작위 텐서 생성, time embedding을 위함
+        ) #
         self.total_time = total_time
 
         layer1 = torch.nn.Linear(self.in_mlpC, featureD)
@@ -93,11 +93,13 @@ class DyRender(torch.nn.Module):
             time_embedding = (self.time_pos_encoding[temporal_indices.reshape(-1)]).reshape(Ns, num_frames, -1)
         features = features.unsqueeze(1).expand(-1, num_frames, -1)
         assert len(features.shape) == 3
-        indata = [features, time_embedding]
+        indata = [features, time_embedding] #feature와 positional encoding된 time을 input으로 넣기
         if self.using_view:
             indata += [viewdirs.unsqueeze(dim=1).expand(-1, num_frames, -1)]
             indata += [positional_encoding(viewdirs, self.viewpe).unsqueeze(dim=1).expand(-1, num_frames, -1)]
+            #view 방향도 pe해서 추가
         mlp_in = torch.cat(indata, dim=-1)
+        #여러 리스트를 하나의 텐서로 합침
 
         origin_output = torch.zeros(Ns, num_frames, self.out_dim).to(features)
         st_mask = torch.ones(Ns, num_frames).to(features).bool()
@@ -107,8 +109,8 @@ class DyRender(torch.nn.Module):
             st_mask = st_mask & spatio_temporal_sigma_mask
         if temporal_mask is not None:
             st_mask = st_mask & temporal_mask
-        mlp_in = mlp_in[st_mask]
-        output = self.mlp(mlp_in)
+        mlp_in = mlp_in[st_mask] #마스킹된 부분, 정적인 영역(?) 빼고 input을 만들기
+        output = self.mlp(mlp_in) #MLP에 input 넣기, 3layer mlp
         if self.using_view:
             output = torch.sigmoid(output)
 
@@ -117,7 +119,7 @@ class DyRender(torch.nn.Module):
         origin_output[st_mask] = output
         output = origin_output
         output = output.squeeze(dim=-1)
-        return output
+        return output # output으로 임베딩된 전체 time(wt가 아님!!)과 feature를 3layer MLP에 통과시킨 것을 리턴
 
 class DirectDyRender(torch.nn.Module):
     def __init__(self, inChanel, viewpe=6, using_view=False, n_time_embedding=6,

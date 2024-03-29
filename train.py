@@ -13,7 +13,6 @@ from torch.cuda.amp import GradScaler
 from torch.cuda.amp import autocast
 from functools import partial
 
-
 import json, random
 from renderer import *
 from utils import *
@@ -25,9 +24,10 @@ from dataLoader import dataset_dict
 import sys
 from torch.profiler import profile, record_function, ProfilerActivity
 
-
 # torch.backends.cudnn.benchmark = True
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+#device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda")
+print(device)
 
 renderer = OctreeRender_trilinear_fast
 
@@ -54,6 +54,7 @@ def render_test(args):
     test_dataset = dataset(args.datadir, split='test', downsample=args.downsample_train, is_stack=True,
                            n_frames=args.n_frames, render_views=args.render_views, scene_box=args.scene_box,
                            frame_start=args.frame_start, near=args.near, far=args.far, diffuse_kernel=args.diffuse_kernel)
+    print("test_dataset Ready!")
     white_bg = test_dataset.white_bg
     ndc_ray = args.ndc_ray
 
@@ -102,6 +103,7 @@ def render_test(args):
                                     static_featureC=args.static_featureC,
                                     )
     tensorf.load(ckpt)
+    print("ckpt loaded!")
 
     logfolder = os.path.dirname(args.ckpt)
     if args.dense_alpha:
@@ -129,6 +131,7 @@ def render_test(args):
             PSNRs_test, PSNRs_STA_test, all_metrics = evaluation(test_dataset,tensorf, args, renderer, f'{logfolder}/{args.expname}/imgs_test_all/',
                                     N_vis=-1, N_samples=-1, white_bg = white_bg, ndc_ray=ndc_ray,device=device, simplify=(args.n_frames>0),
                                     static_branch_only=args.static_branch_only_initial, remove_foreground=args.remove_foreground)
+            print("evaluation Done!")
         print(f'======> {args.expname} test all psnr: {np.mean(PSNRs_test)} <========================')
         print(f'======> {args.expname} test all psnr sta: {np.mean(PSNRs_STA_test)} <========================')
 
@@ -148,7 +151,8 @@ def render_test(args):
                                         N_vis=-1, N_samples=-1, white_bg = white_bg, ndc_ray=ndc_ray,device=device)
 
 def train_dynamics(args, tensorf, allrays, allrgbs, allstds, ndc_ray, nSamples, scaler, device, iter_ratio=1):
-    DynamicCriterion = Dynamics(args, device, use_volumetric_render=args.dynamic_use_volumetric_render)
+    #이게 동적인 영역 만드는 부분인 것 같음
+    DynamicCriterion = Dynamics(args, device, use_volumetric_render=args.dynamic_use_volumetric_render) #Dynamic scene 평가하는 클래스 생성
     dy_optimizer = torch.optim.Adam(tensorf.get_dynamic_optparam_groups(args.lr_init), betas=(0.9, 0.99))
     dy_lr_factor = args.lr_decay_target_ratio ** (1 / (args.n_dynamic_iters*iter_ratio))
     pbar_dynamic = tqdm(range(args.n_dynamic_iters*iter_ratio), miniters=args.progress_refresh_rate, file=sys.stdout)
@@ -163,6 +167,7 @@ def train_dynamics(args, tensorf, allrays, allrgbs, allstds, ndc_ray, nSamples, 
             retva = tensorf.forward_dynamics(rays_train.to(device), is_train=True, variance_train=variance_train,
                                                                       ndc_ray=ndc_ray, N_samples=nSamples,
                                                                       rgb_train=rgb_train)
+            #tensorf(TensorVMSplit)은 MixVoxels를 상속하고 있어서 forward_dynamic 함수를 사용할 수 있음
             dynamic_prediction_loss = DynamicCriterion.calculate_loss(*retva)
             # loss_tv = tensorf.TV_loss_dynamic(tvreg) * 2
             loss_tv = 0
@@ -220,24 +225,24 @@ def eval_dynamics(args, tensorf, test_dataset, ndc_ray, nSamples, device):
 def reconstruction(args):
 
     # init dataset
-    dataset = dataset_dict[args.dataset_name]
+    dataset = dataset_dict[args.dataset_name] #LLFFVideoDataset 클래스 만들기
     time_dataset_start = time.time()
     train_dataset = dataset(args.datadir, split='train', downsample=args.downsample_train, is_stack=False,
                             n_frames=args.n_frames, scene_box=args.scene_box, temporal_variance_threshold=args.temporal_variance_threshold,
-                            frame_start=args.frame_start, near=args.near, far=args.far, diffuse_kernel=args.diffuse_kernel)
+                            frame_start=args.frame_start, near=args.near, far=args.far, diffuse_kernel=args.diffuse_kernel, use_depth = args.use_depth)
     time_dataset_end = time.time()
     print(f'Loading Train Dataset: {time_dataset_end-time_dataset_start}s')
     time_dataset_start = time_dataset_end
     test_dataset = dataset(args.datadir, split='test', downsample=args.downsample_train, is_stack=True,
                            n_frames=args.n_frames, render_views=args.render_views, scene_box=args.scene_box,
                            temporal_variance_threshold=args.temporal_variance_threshold,
-                           frame_start=args.frame_start, near=args.near, far=args.far, diffuse_kernel=args.diffuse_kernel)
+                           frame_start=args.frame_start, near=args.near, far=args.far, diffuse_kernel=args.diffuse_kernel, use_depth = False)
     time_dataset_end = time.time()
     print(f'Loading Test Dataset: {time_dataset_end-time_dataset_start}s')
 
     white_bg = train_dataset.white_bg
     near_far = train_dataset.near_far
-    ndc_ray = args.ndc_ray
+    ndc_ray = args.ndc_ray #ndc: Normalized Device Coordinate, ray를 정규화한다는 의미, 그냥 하는 것보다 성능이 올라간다고 함
 
     # init resolution
     upsamp_list = args.upsamp_list
@@ -283,8 +288,9 @@ def reconstruction(args):
                        'n_train_frames': args.n_train_frames,
                        'net_layer_add': args.net_layer_add,
                        })
-        tensorf = eval(args.model_name)(**kwargs)
-        tensorf.load(ckpt)
+        tensorf = eval(args.model_name)(**kwargs) #eval()은 파이썬 내장함수로 ()안에 문자열을 실행시킴, 여기서는 모델 만드는 부분
+        #arg.model_name 의 default는 'TensorVMSplit', 선택지는 'TensorVMSplit', 'NeuralVoxel'
+        tensorf.load(ckpt) #체크포인트 가져오기
     else:
         tensorf = eval(args.model_name)(args, aabb, reso_cur, device,
                     density_n_comp=n_lamb_sigma, appearance_n_comp=n_lamb_sh, app_dim=args.data_dim_color, near_far=near_far,
@@ -359,15 +365,32 @@ def reconstruction(args):
 
     batch_factor = [1, 1, 1, 1] if args.batch_factor == [] else args.batch_factor
     allrays, allrgbs, allstds = train_dataset.all_rays, train_dataset.all_rgbs, train_dataset.all_stds
+    #print("allrays", allrays, end="\n")
+    print("allrays.shape : ", allrays.shape, end="\n") #allrays.shape torch.Size([1028196, 6])
+    #print("allrgbs", allrgbs, end="\n")
+    print("allrgbs.shape : ", allrgbs.shape, end="\n")
+    #print("allstds", allstds, end="\n")
+    print("allstds.shape : ", allstds.shape, end="\n")
+    if args.use_depth:
+        allrays_depth = train_dataset.all_rays_depth #[300, 1277, 8] [300프레임, ray개수, (rays_o, rays_d, depth, weights)]
+                                                    #를 reshape(-1, 8) 로 핌 ([383100, 8])
+        print("allrays_depth.shape : ", allrays_depth.shape, end="\n")
+
     dynamicrays, dynamicrgbs, dynamicstds = train_dataset.dynamic_rays, train_dataset.dynamic_rgbs, train_dataset.dynamic_stds
     if not args.ndc_ray:
         allrays, allrgbs, allstds = tensorf.filtering_rays(allrays, allrgbs, allstds, bbox_only=True)
     current_batch_size = int(args.batch_size * batch_factor[0])
     print("creating sammpler with batch size: {}".format(current_batch_size))
     if args.ray_sampler == 'simple':
-        print("=================SimpleRay========================")
+        print("=================SimpleRay========================") #동적인 영역 학습?
         print('All Rays: {}'.format(allrays.shape[0]))
         trainingSampler = SimpleSampler(allrays.shape[0], current_batch_size)
+        if args.use_depth:
+            depth_batch_size = round((current_batch_size*allrays_depth.shape[0])/allrays.shape[0])
+            trainingSampler_depth = SimpleSampler(allrays_depth.shape[0], depth_batch_size)
+            print("depth_batch_size : ", depth_batch_size)
+        
+
     elif args.ray_sampler == 'weighted':
         trainingSampler = WeightedRaySampler(allrays.shape[0], current_batch_size, train_dataset.all_rays_weight)
     elif args.ray_sampler == 'comp':
@@ -384,11 +407,11 @@ def reconstruction(args):
     print(f"initial TV_weight density: {TV_weight_density} appearance: {TV_weight_app}")
 
     # Training Dynamic Volumetric representations
-    train_dynamics(args, tensorf, allrays, allrgbs, allstds, ndc_ray, nSamples, scaler, device)
+    train_dynamics(args, tensorf, allrays, allrgbs, allstds, ndc_ray, nSamples, scaler, device) 
     eval_dynamics(args, tensorf, test_dataset, ndc_ray, nSamples, device)
     DynamicCriterion = Dynamics(args, device, use_volumetric_render=args.dynamic_use_volumetric_render)
     if args.temporal_sampler == 'simple':
-        print("=================SimpleTemporal========================")
+        print("=================SimpleTemporal========================") #정적인 영역 학습?
         temporal_sampler = TemporalSampler(args.n_frames, args.n_train_frames)
     elif args.temporal_sampler == 'weighted':
         temporal_sampler = TemporalWeightedSampler(args.n_frames, args.n_train_frames, args.temperature_start,
@@ -409,13 +432,31 @@ def reconstruction(args):
     timing = {}
 
     # tensorf.calc_init_alpha(tuple(reso_cur))
+    # 여기가 정적/동적 복셀 학습이 진행되는 부분
+    # 이미 정적/동적 복셀을 구별하기 위한 ray의 color, std는 준비됨
     for iteration in pbar:
         _time = time.time()
         if args.use_cosine_lr_scheduler:
             lr_factor = math.cos((iteration + 1.0) / args.n_iters * math.pi / 2) / math.cos((iteration + 0.0) / args.n_iters * math.pi / 2)
         gamma_current = iteration/args.n_iters * (args.gamma_end - args.gamma_start) + args.gamma_start
+
         ray_idx = trainingSampler.nextids(gamma=gamma_current)
         rays_train, rgb_train, std_train = allrays[ray_idx].to(device).float(), allrgbs[ray_idx].to(device).float(), allstds[ray_idx].to(device).float()
+        
+        if args.use_depth:
+            rays_idx_depth = trainingSampler_depth.nextids(gamma_current)
+            rays_train_depth = allrays_depth[rays_idx_depth].to(device)
+            
+
+        # print("rays_train", rays_train)
+        # print("rays_train.shape", rays_train.shape)
+        # print("rgb_train", rgb_train)
+        # print("rgb_train.shape", rgb_train.shape)
+        # print("std_train", std_train)
+        # print("std_train.shape", std_train.shape)
+
+
+        #여기에 train된 ray가 존재함, std_train으로 복셀이 정적/동적 인지 구별함(?)
         args.static_branch_only = args.static_branch_only_initial
         temporal_indices, supervision_rgb_train = temporal_sampler.sample(rgb_train, iteration)
         #rgb_map, alphas_map, depth_map, weights, uncertainty
@@ -425,14 +466,34 @@ def reconstruction(args):
         optimizer.zero_grad()
         static_optimizer.zero_grad()
         with autocast(enabled=bool(args.amp)):
-            # with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA]) as prof:
+
+            ###########CORE OPTIMIZATION LOOP!################
+            # print("current_batch_size", current_batch_size)
+            # print("nSamples", nSamples)
+            # print("white_bg", white_bg)
+            # print("ndc_ray", ndc_ray)
+            # print("temporal_indices", temporal_indices.shape)
+            # print("static_branch_only", args.static_branch_only)
+
             retva = renderer(rays_train, tensorf, chunk=current_batch_size,
                                     N_samples=nSamples, white_bg = white_bg, ndc_ray=ndc_ray,
                                     device=device, is_train=True, rgb_train=rgb_train,
                                     temporal_indices=temporal_indices, static_branch_only=args.static_branch_only,
                                     std_train=std_train, nodepth=True)
-            # print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=10))
             retva = Namespace(**retva)
+            
+            
+            if args.use_depth:
+                retva_depth = renderer(rays_train_depth, tensorf, chunk=depth_batch_size,
+                                        N_samples=nSamples, white_bg = white_bg, ndc_ray=ndc_ray,
+                                        device=device, is_train=True, rgb_train=None,
+                                        temporal_indices=temporal_indices, static_branch_only=True,
+                                        std_train=None, nodepth=True)
+                retva_depth = Namespace(**retva_depth)
+            # print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=10))
+            
+
+            
 
             # =============== dynamics prediction for points ===============
             # dynamics dynamics_supervision shape: Ns
@@ -442,6 +503,8 @@ def reconstruction(args):
             # ray_wise_temporal_mask [Nr x T]
             total_loss = 0
             total_static_loss = 0
+          
+            #args.static_dynamic_seperate = 1
             if args.static_dynamic_seperate:
                 if not args.static_branch_only:
                     # supervision_rgb_train = rgb_train.transpose(0,1)[temporal_indices].transpose(0,1)
@@ -452,6 +515,7 @@ def reconstruction(args):
                     else:
                         raise NotImplementedError
                     loss_ray_wise = loss_ray_wise.mean(dim=1)
+                     
 
                     # loss_mask = loss_ray_wise > (iteration /args.n_iters *
                     #                              (args.loss_weight_thresh_end - args.loss_weight_thresh_start)
@@ -469,11 +533,20 @@ def reconstruction(args):
                                          .unsqueeze(dim=1).expand(-1, args.n_train_frames)[retva.ray_wise_temporal_mask].reshape(-1)
 
                     loss = (loss_ray_wise * loss_ray_weight).sum()/loss_ray_weight.sum()
-
+                    if args.use_depth:
+                        depth_loss = torch.mean(((retva_depth.static_depth_map - rays_train_depth[:, 6])**2) * rays_train_depth[:, 7])
+    
                     # hard_fraction = loss_mask.sum()/(loss_mask.shape[0])
                     Metrics['hfrac'].append(1.0)
                     # loss = ((retva.rgb_map - rgb_train[retva.ray_wise_temporal_mask])**2).mean()
-                    total_loss += loss
+
+
+                    depth_lambda = 0.1 #depth loss 가중치, 하이퍼파라미터
+                    if args.use_depth:
+                        total_loss += (loss + depth_lambda * depth_loss)
+                    else:
+                        total_loss += loss
+
                     Metrics['PSNRs'].append(-10.0 * np.log(loss.item()) / np.log(10.0))
                     Metrics['frac'].append(retva.fraction)
                     Metrics['tfrac'].append(retva.temporal_fraction)
@@ -499,7 +572,7 @@ def reconstruction(args):
                 Metrics['PSNRs_STA'].append(-10.0 * np.log(loss_static.item()) / np.log(10.0))
                 Metrics['sfrac'].append(retva.static_fraction)
             else:
-                loss_weight = (retva.ray_wise_temporal_mask.float().mean(dim=1)).unsqueeze(dim=1).expand(-1, args.n_frames)
+                loss_weight = (retva.ray_wise_temporal_mask.float().mean(dim=1)).unsqueeze(dim=1).expand(-1, args.n_frames) #다이나믹 마스크
                 weight_static = torch.ones_like(loss_weight) * args.loss_weight_static
                 weight_dynamic = torch.ones_like(loss_weight)
                 loss_weight = torch.where((loss_weight-1).abs()<0.0001, weight_dynamic, weight_static)

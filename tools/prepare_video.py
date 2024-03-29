@@ -12,6 +12,7 @@ if __name__ == '__main__':
     ---------video_1/
     ---------video_2/
     """
+    
     parser.add_argument('data_dir', type=str, help='folder for processing')
     parser.add_argument('--data_type', type=str, default='dynerf', choices=['dynerf', 'gopro'], help='folder for processing')
     args = parser.parse_args()

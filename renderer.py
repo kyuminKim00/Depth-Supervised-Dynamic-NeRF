@@ -43,8 +43,33 @@ def OctreeRender_trilinear_fast(rays, tensorf, std_train, chunk=4096, N_samples=
         # tiktok.tik()
         rays_chunk = rays[chunk_idx * chunk:(chunk_idx + 1) * chunk].to(device)
         current_values = tensorf(rays_chunk, is_train=is_train, white_bg=white_bg, ndc_ray=ndc_ray,
-                                 N_samples=N_samples, rgb_train=rgb_train, temporal_indices=temporal_indices,
+                                    N_samples=N_samples, rgb_train=rgb_train, temporal_indices=temporal_indices,
                                  static_branch_only=static_branch_only, std_train=std_train,remove_foreground=remove_foreground, **kwargs)
+        #여기에서 모델의 forward 함수 호출, 
+        #rays_chunk로 ray의 묶음을 input으로 넣는다. 
+
+        #current_value(output)은 static의 경우 
+                # retva = {
+                # 'static_sigma': static_sigma,
+                # 'static_rgb': static_rgb,
+                # 'static_rgb_map': static_rgb_map,
+                # 'static_depth_map': static_depth_map,
+                # 'static_fraction': static_fraction,
+                # 'valid_static_sigma': valid_static_sigma,
+        
+        #dynamic의 경우 
+        # ret_values = {'rgb_map': rgb_map,
+        #               'fraction': fraction,
+        #               'temporal_fraction': temporal_fraction,
+        #               'ray_wise_temporal_mask': ray_wise_temporal_mask,
+        #               }
+        # ret_values.update({
+        #             'static_rgb_map': static_rgb_map,
+        #             'static_depth_map': static_depth_map,
+        #             'static_fraction': static_fraction,
+        #         })
+
+
         # tiktok.tik_print('RENDER/rendering')
         if not with_grad:
             for k in current_values.keys():
@@ -57,7 +82,7 @@ def OctreeRender_trilinear_fast(rays, tensorf, std_train, chunk=4096, N_samples=
                         current_values[k] = current_values[k]
         return_values.append(current_values)
         # tiktok.tik_print('RENDER/post')
-    return cat_dic_list(return_values)
+    return cat_dic_list(return_values) #이 함수 거치면 그냥 배열 concate 됨
 
 
 @torch.no_grad()
@@ -83,6 +108,7 @@ def evaluation(test_dataset, tensorf, args, renderer, savePath=None, N_vis=5, pr
 
         retva = renderer(rays, tensorf,  std_train=None, chunk=args.batch_size//2, N_samples=N_samples, ndc_ray=ndc_ray, white_bg = white_bg, device=device, with_grad=False,
                          simplify=simplify, static_branch_only=static_branch_only, remove_foreground=remove_foreground)
+        print("renderer Done")
         retva = Namespace(**retva)
 
         if not static_branch_only:
@@ -124,11 +150,12 @@ def evaluation(test_dataset, tensorf, args, renderer, savePath=None, N_vis=5, pr
 
             if not static_branch_only:
                 for i_time in range(0, retva.comp_rgb_map.shape[2], 10):
-                    # ssim = rgb_ssim(retva.comp_rgb_map[:,:,i_time,:], gt_rgb[:,:,i_time,:], 1)
-                    ssim = sk_ssim(retva.comp_rgb_map[:,:,i_time,:].cpu().detach().numpy(), gt_rgb[:,:,i_time,:].cpu().detach().numpy(), multichannel=True)
+                    ## ssim = rgb_ssim(retva.comp_rgb_map[:,:,i_time,:], gt_rgb[:,:,i_time,:], 1)
+                    
+                    #ssim = sk_ssim(retva.comp_rgb_map[:,:,i_time,:].cpu().detach().numpy(), gt_rgb[:,:,i_time,:].cpu().detach().numpy(), multichannel=True)
                     l_a = rgb_lpips(gt_rgb[:,:,i_time,:].numpy(), retva.comp_rgb_map[:,:,i_time,:].numpy(), 'alex', tensorf.device)
                     l_v = rgb_lpips(gt_rgb[:,:,i_time,:].numpy(), retva.comp_rgb_map[:,:,i_time,:].numpy(), 'vgg', tensorf.device)
-                    ssims.append(ssim)
+                    #ssims.append(ssim)
                     l_alex.append(l_a)
                     l_vgg.append(l_v)
                 print('=================LPIPS==================')
@@ -136,6 +163,7 @@ def evaluation(test_dataset, tensorf, args, renderer, savePath=None, N_vis=5, pr
                 print(l_vgg)
 
         if not static_branch_only:
+            #is_video = 0
             for rgb_map, depth_map, name, is_video in [(retva.static_rgb_map, retva.static_depth_map, 'static', False),
                                                        (retva.rgb_map, retva.depth_map, 'moving', True),
                                                        (retva.comp_rgb_map, retva.comp_depth_map, 'comp', True)]:
@@ -188,7 +216,8 @@ def evaluation(test_dataset, tensorf, args, renderer, savePath=None, N_vis=5, pr
     psnr_sta = np.mean(np.asarray(PSNRs_STA))
     # if compute_extra_metrics and not simplify and not static_branch_only:
     if not static_branch_only:
-        ssim = np.mean(np.asarray(ssims))
+        #ssim = np.mean(np.asarray(ssims))
+        ssim = 0
         dssim = np.mean((1.-np.asarray(ssims))/2.)
         l_a = np.mean(np.asarray(l_alex))
         l_v = np.mean(np.asarray(l_vgg))
@@ -250,11 +279,14 @@ def evaluation_path(test_dataset, tensorf, args, c2ws, renderer, savePath=None, 
 
         tictok.tik()
         temporal_indices = torch.arange(n_frames).long().cuda()
+        
         c2w = torch.FloatTensor(c2w)
         rays_o, rays_d = get_rays(test_dataset.directions, c2w)  # both (h*w, 3)
+        
         if ndc_ray:
             rays_o, rays_d = ndc_rays_blender(H, W, test_dataset.focal[0], 1.0, rays_o, rays_d)
         rays = torch.cat([rays_o, rays_d], 1)  # (h*w, 6)
+
         tictok.tik_print('pre-render')
         retva = renderer(rays, tensorf, std_train=None, chunk=args.batch_size*4, N_samples=N_samples,
                          ndc_ray=ndc_ray, white_bg = white_bg, device=device, with_grad=False,
@@ -265,6 +297,7 @@ def evaluation_path(test_dataset, tensorf, args, c2ws, renderer, savePath=None, 
 
         # retva.rgb_map = retva.rgb_map.clamp(0.0, 1.0)
         retva.comp_rgb_map = retva.comp_rgb_map.clamp(0.0, 1.0)
+        
         # retva.static_rgb_map = retva.static_rgb_map.clamp(0.0, 1.0)
 
         # # retva.rgb_map, retva.depth_map = retva.rgb_map.reshape(H, W, n_train_frames, 3).cpu(), retva.depth_map.reshape(H, W, n_train_frames).cpu()

@@ -13,11 +13,11 @@ lr_dynamic_init = 0.03
 lr_dynamic_basis = 2e-3
 
 dataset_name = llffvideo
-datadir = ../data/flame_steak/
+datadir = /data2/kkm/km/mixvoxels_depth/data/flame_steak
 expname =  tensorf_flower_VM_coffe_small3_static_dynamic12
 basedir = ./log
 
-downsample_train = 2.0
+downsample_train = 4.0
 ndc_ray = 1
 
 n_iters = 5000

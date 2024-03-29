@@ -142,8 +142,8 @@ def color_space_transform(input_color, fromSpace2toSpace):
 	dim = input_color.shape
 
 	# Assume D65 standard illuminant
-	reference_illuminant = np.array([[[0.950428545]], [[1.000000000]], [[1.088900371]]]).astype(np.float32)
-	inv_reference_illuminant = np.array([[[1.052156925]], [[1.000000000]], [[0.918357670]]]).astype(np.float32)
+	reference_illuminant = np.array([[[0.950428545]], [[1.000000000]], [[1.088900371]]]).astype(float32)
+	inv_reference_illuminant = np.array([[[1.052156925]], [[1.000000000]], [[0.918357670]]]).astype(float32)
 
 	if fromSpace2toSpace == "srgb2linrgb":
 		limit = 0.04045
@@ -180,7 +180,7 @@ def color_space_transform(input_color, fromSpace2toSpace):
 			a33 = 1.057148933
 		A = np.array([[a11, a12, a13],
 					  [a21, a22, a23],
-					  [a31, a32, a33]]).astype(np.float32)
+					  [a31, a32, a33]]).astype(float32)
 
 		input_color = np.transpose(input_color, (2, 0, 1)) # C(H*W)
 		transformed_color = np.matmul(A, input_color)
@@ -315,7 +315,7 @@ def generate_spatial_filter(pixels_per_degree, channel):
 	r = int(r)
 	deltaX = 1.0 / pixels_per_degree
 	x, y = np.meshgrid(range(-r, r + 1), range(-r, r + 1))
-	z = ((x * deltaX)**2 + (y * deltaX)**2).astype(np.float32)
+	z = ((x * deltaX)**2 + (y * deltaX)**2).astype(float32)
 
 	# Generate weights
 	s = a1 * np.sqrt(np.pi / b1) * np.exp(-np.pi**2 * z / b1) + a2 * np.sqrt(np.pi / b2) * np.exp(-np.pi**2 * z / b2)
@@ -336,7 +336,7 @@ def spatial_filter(img, s_a, s_rg, s_by):
 	"""
 	# Apply Gaussian filters
 	dim = img.shape
-	img_tilde_opponent = np.zeros((dim[0], dim[1], dim[2])).astype(np.float32)
+	img_tilde_opponent = np.zeros((dim[0], dim[1], dim[2])).astype(float32)
 	img_tilde_opponent[0:1, :, :] = cv.filter2D(img[0:1, :, :].squeeze(0), ddepth=-1, kernel=s_a, borderType=cv.BORDER_REPLICATE)
 	img_tilde_opponent[1:2, :, :] = cv.filter2D(img[1:2, :, :].squeeze(0), ddepth=-1, kernel=s_rg, borderType=cv.BORDER_REPLICATE)
 	img_tilde_opponent[2:3, :, :] = cv.filter2D(img[2:3, :, :].squeeze(0), ddepth=-1, kernel=s_by, borderType=cv.BORDER_REPLICATE)
@@ -358,7 +358,7 @@ def hunt_adjustment(img):
 	L = img[0:1, :, :]
 
 	# Apply Hunt adjustment
-	img_h = np.zeros(img.shape).astype(np.float32)
+	img_h = np.zeros(img.shape).astype(float32)
 	img_h[0:1, :, :] = L
 	img_h[1:2, :, :] = np.multiply((0.01 * L), img[1:2, :, :])
 	img_h[2:3, :, :] = np.multiply((0.01 * L), img[2:3, :, :])
@@ -470,8 +470,8 @@ def compute_ldrflip(reference, test, pixels_per_degree=(0.7 * 3840 / 0.7) * np.p
 
 	# Color metric
 	deltaE_hyab = hyab(preprocessed_reference, preprocessed_test)
-	hunt_adjusted_green = hunt_adjustment(color_space_transform(np.array([[[0.0]], [[1.0]], [[0.0]]]).astype(np.float32), 'linrgb2lab'))
-	hunt_adjusted_blue = hunt_adjustment(color_space_transform(np.array([[[0.0]], [[0.0]], [[1.0]]]).astype(np.float32), 'linrgb2lab'))
+	hunt_adjusted_green = hunt_adjustment(color_space_transform(np.array([[[0.0]], [[1.0]], [[0.0]]]).astype(float32), 'linrgb2lab'))
+	hunt_adjusted_blue = hunt_adjustment(color_space_transform(np.array([[[0.0]], [[0.0]], [[1.0]]]).astype(float32), 'linrgb2lab'))
 	cmax = np.power(hyab(hunt_adjusted_green, hunt_adjusted_blue), qc)
 	deltaE_c = redistribute_errors(np.power(deltaE_hyab, qc), cmax)
 
@@ -650,7 +650,7 @@ def compute_hdrflip(reference, test, directory, reference_filename, test_filenam
 
 	# Perform exposure compensation and tone mapping, and compute LDR-FLIP for each pair of tone mapped image
 	dim = reference.shape
-	all_errors = np.zeros((dim[1], dim[2], num_exposures)).astype(np.float32)
+	all_errors = np.zeros((dim[1], dim[2], num_exposures)).astype(float32)
 
 	# Store sign of start and stop exposures
 	stop_exposure_sign = "m" if stop_exposure < 0 else "p"

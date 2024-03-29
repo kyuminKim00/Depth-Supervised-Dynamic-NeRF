@@ -10,6 +10,7 @@ from torchvision import transforms as T
 from utils import get_ray_weight, SimpleSampler
 import time
 from .ray_utils import *
+from dataLoader.load_llff import load_colmap_depth
 
 # ========= Resize images with factors ==========
 def _minify(basedir, factors=[], resolutions=[], prefix='frames_'):
@@ -269,10 +270,11 @@ class SSDDataset(Dataset):
         self.total = self.n_saving
         self.batch = 1
 
-class LLFFVideoDataset(Dataset):
-    def __init__(self, datadir, split='train', downsample=4, is_stack=False, hold_id=[0,], n_frames=100,
+class LLFFVideoDataset(Dataset): #torch.utils.data의 Dataset 클래스를 상속함, 상속하면 DataLoader() 함수로 사용자 정의 Dataset class를
+                                 #불러 올 수 있다.
+    def __init__(self, datadir, split='train', downsample=4.0, is_stack=False, hold_id=[0,], n_frames=100,
                  render_views=120, tmp_path='memory', scene_box=[-3.0, -1.67, -1.2], temporal_variance_threshold=1000,
-                 frame_start=0, near=0.0, far=1.0, diffuse_kernel=0):
+                 frame_start=0, near=0.0, far=1.0, diffuse_kernel=0, use_depth=True):
         """
         spheric_poses: whether the images are taken in a spheric inward-facing manner
                        default: False (forward-facing)
@@ -280,9 +282,11 @@ class LLFFVideoDataset(Dataset):
         """
         self.root_dir = datadir
         self.split = split
-        self.hold_id = hold_id
-        self.is_stack = is_stack
+        self.hold_id = hold_id #기본적으로 0번째 카메라가 test set, hold_id=[0,]
+        self.is_stack = is_stack 
+
         self.downsample = downsample
+        self.use_depth = use_depth
         self.diffuse_kernel = diffuse_kernel
         self.define_transforms()
         self.render_views = render_views
@@ -291,7 +295,15 @@ class LLFFVideoDataset(Dataset):
         self.blender2opencv = np.eye(4)#np.array([[1, 0, 0, 0], [0, -1, 0, 0], [0, 0, -1, 0], [0, 0, 0, 1]])
         self.n_frames = n_frames
         self.frame_start = frame_start
+        print("read_meta 시작")
         self.read_meta()
+        print("read_meta 끝")
+        
+        if use_depth:
+            print("read_depth start")
+            self.read_depth()
+            print("read_depth down")
+
         self.white_bg = False
 
         # self.near_far = [np.min(self.near_fars[:,0]),np.max(self.near_fars[:,1])]
@@ -311,21 +323,33 @@ class LLFFVideoDataset(Dataset):
     def read_meta(self):
 
         poses_bounds = np.load(os.path.join(self.root_dir, 'poses_bounds.npy'))  # (N_images, 17)
+        #poses_bounds = np.load("/data2/kkm/km/mixvoxels/data/flame_steak/poses_bounds.npy")  # (4, 17)
+        #[rx1, ry1, rz1, tx, H, rx2, ry2, rz2, ty, W, rx3, ry3, rz3, tz, focal_length, bds_min, bds_max]
+        
+        print(poses_bounds.shape)
         if self.downsample == 1.0:
-            self.video_paths = sorted(glob.glob(os.path.join(self.root_dir, 'frames/*')))
+            self.video_paths = sorted(glob.glob(os.path.join(self.root_dir, F'frames/*')))
+            print("video", self.video_paths)
+            print("sorted OK!")
         else:
             _minify(self.root_dir, factors=[int(self.downsample), ])
             self.video_paths = sorted(glob.glob(os.path.join(self.root_dir, 'frames_{}/*'.format(int(self.downsample)))))
             self.video_paths = list(filter(lambda x: not x.endswith('.npy'), self.video_paths))
+            
+        print("before cal_std")
         _calc_std(os.path.join(self.root_dir, 'frames'+('' if self.downsample == 1.0 else '_{}'.format(int(self.downsample)))),
                   os.path.join(self.root_dir, 'stds'+('' if self.frame_start==0 else str(self.frame_start))+('' if self.downsample == 1.0 else '_{}'.format(int(self.downsample)))),
                   frame_start=self.frame_start, n_frame=self.n_frames)
+        print("after cal_std")
         if 'coffee_martini' in self.root_dir:
             print('====================deletting unsynchronized video==============')
             poses_bounds = np.concatenate([poses_bounds[:12], poses_bounds[13:]], axis=0)
             self.video_paths.pop(12)
+     
         # load full resolution image then resize
         if self.split in ['train', 'test']:
+            print(len(poses_bounds))
+            print(len(self.video_paths))
             assert len(poses_bounds) == len(self.video_paths), \
                 'Mismatch between number of images and number of poses! Please rerun COLMAP!'
 
@@ -350,8 +374,8 @@ class LLFFVideoDataset(Dataset):
         near_original = self.near_fars.min()
         scale_factor = near_original * 0.75  # 0.75 is the default parameter
         # the nearest depth is at 1/0.75=1.33
-        self.near_fars /= scale_factor
-        self.poses[..., 3] /= scale_factor
+        self.near_fars /= scale_factor #bds_min, bds_max는 정규화 되는게 아니라 scale_factor에 따라서 스케일이 정해짐
+        self.poses[..., 3] /= scale_factor 
 
         # build rendering path
         N_views, N_rots = self.render_views, 2
@@ -372,8 +396,8 @@ class LLFFVideoDataset(Dataset):
         average_pose = average_poses(self.poses)
         dists = np.sum(np.square(average_pose[:3, 3] - self.poses[:, :3, 3]), -1)
 
-
         i_test = np.array(self.hold_id)
+        print('itest', i_test)
         video_list = i_test if self.split != 'train' else list(set(np.arange(len(self.poses))) - set(i_test))
 
         # use first N_images-1 to train, the LAST is val
@@ -384,9 +408,13 @@ class LLFFVideoDataset(Dataset):
         self.all_stds = []
         for i in video_list:
             video_path = self.video_paths[i]
+            print(video_path)
             c2w = torch.FloatTensor(self.poses[i])
+    
             frames_paths = sorted(os.listdir(video_path))[self.frame_start:self.frame_start+self.n_frames][::(self.n_frames//self.n_frames)]
+            #print("frames_paths OK!")
             std_path = video_path.replace('frames', 'stds'+('' if self.frame_start==0 else str(self.frame_start))) + '_std.npy'
+            #print("std_paths OK!")
             assert os.path.isdir(video_path)
             assert os.path.isfile(std_path)
             frames = [Image.open(os.path.join(video_path, image_id)).convert('RGB') for image_id in frames_paths]
@@ -408,20 +436,23 @@ class LLFFVideoDataset(Dataset):
                 std_frames_without_diffuse = torch.from_numpy(std_frames_without_diffuse).reshape(-1)
 
             rays_weight = get_ray_weight(frames)
-
+            print("frame " + str(i) + " OK!")
             self.all_rays_weight.append(rays_weight.half())
             self.all_rgbs += [frames.half()]
             self.all_stds += [std_frames.half()]
             if std_frames_without_diffuse is not None:
                 self.all_stds_without_diffusion += [std_frames_without_diffuse.half()]
-
-            rays_o, rays_d = get_rays(self.directions, c2w)  # both (h*w, 3)
+            print("std " + str(i) + " OK!")
+            rays_o, rays_d = get_rays(self.directions, c2w)# both (h*w, 3)
             rays_o, rays_d = ndc_rays_blender(H, W, self.focal[0], 1.0, rays_o, rays_d)
             # viewdir = rays_d / torch.norm(rays_d, dim=-1, keepdim=True)
 
             self.all_rays += [torch.cat([rays_o, rays_d], 1).half()]  # (h*w, 6)
+            print(str(i) + " OK!")
 
         if not self.is_stack:
+            print("is stack false")
+            
             self.all_rays_weight = torch.cat(self.all_rays_weight, dim=0) # (Nr)
             self.all_rays = torch.cat(self.all_rays, 0) # (len(self.meta['frames])*h*w, 3)
             self.all_rgbs = torch.cat(self.all_rgbs, 0) # (len(self.meta['frames])*h*w, T, 3)
@@ -429,11 +460,23 @@ class LLFFVideoDataset(Dataset):
             if len(self.all_stds_without_diffusion) > 0:
                 self.all_stds_without_diffusion = torch.cat(self.all_stds_without_diffusion, 0)
             # calc the dynamic data
+                
             dynamic_mask = self.all_stds > self.temporal_variance_threshold
-            self.dynamic_rays = self.all_rays[dynamic_mask]
-            self.dynamic_rgbs = self.all_rgbs[dynamic_mask]
+            
+            print("ray: " + str(self.all_rays.shape))
+            print("rgb: " + str(self.all_rgbs.shape))
+            print("stds: " + str(self.all_stds.shape))
+            print("다이나믹 마스크: " + str(dynamic_mask.shape))
+
             self.dynamic_stds = self.all_stds[dynamic_mask]
+            print("std OK!")
+            self.dynamic_rays = self.all_rays[dynamic_mask]
+            print("ray OK!")
+            self.dynamic_rgbs = self.all_rgbs[dynamic_mask]
+            print("rgb OK!")
+            
         else:
+            print("is stack true")
             self.all_rays_weight = torch.stack(self.all_rays_weight, dim=0) # (Nr)
             self.all_rays = torch.stack(self.all_rays, 0)   # (len(self.meta['frames]),h,w, 3)
             T = self.all_rgbs[0].shape[1]
@@ -441,6 +484,58 @@ class LLFFVideoDataset(Dataset):
             self.all_stds = torch.stack(self.all_stds, 0).reshape(-1,*self.img_wh[::-1])
             if len(self.all_stds_without_diffusion) > 0:
                 self.all_stds_without_diffusion = torch.stack(self.all_stds_without_diffusion, 0).reshape(-1,*self.img_wh[::-1])
+
+
+    def read_depth(self):
+        depth_gts = load_colmap_depth(self.root_dir)
+        print("load_colmap_depth OK")
+        poses_bounds = np.load(os.path.join(self.root_dir, 'poses_bounds.npy'))  # (N_images, 17)
+        poses = poses_bounds[:, :15].reshape(-1, 3, 5)
+
+        near_fars = poses_bounds[:, -2:]
+        H, W, focal_ = poses[0, :, -1]
+
+        img_wh_ = np.array([int(W / self.downsample), int(H / self.downsample)])
+        focal_ = [focal_ * img_wh_[0] / W, focal_ * img_wh_[1] / H]
+  
+        poses = np.concatenate([poses[..., 1:2], -poses[..., :1], poses[..., 2:4]], -1)
+        near_original = near_fars.min()
+        scale_factor = near_original * 0.75
+        near_fars /= scale_factor #bds_min, bds_max는 정규화 되는게 아니라 scale_factor에 따라서 스케일이 정해짐
+        poses[..., 3] /= scale_factor 
+        W, H = img_wh_
+
+        directions = get_ray_directions_blender(H, W, focal_)
+
+        self.all_rays_depth = []
+
+        for i in range(poses.shape[0]):
+            if i!=0: #0번째 카메라는 test 카메라로 depth 사용을 하지 않는다.
+                c2w = torch.FloatTensor(poses[i])
+                c2w = c2w.numpy()
+
+                rays_o_col, rays_d_col = get_rays_by_coord_np(H, W, focal_[0], c2w, depth_gts[i]['coord'])
+                rays_o_col = torch.tensor(rays_o_col)
+                rays_d_col = torch.tensor(rays_d_col)
+                rays_o_col, rays_d_col = ndc_rays_blender(H, W, focal_[0], 1.0, rays_o_col, rays_d_col)
+                rays_o_col = rays_o_col.float()
+                rays_d_col = rays_d_col.float()
+
+                depth_value = depth_gts[i]['depth'][:,None,None]
+                weights = depth_gts[i]['error'][:,None,None]
+                depth_value = torch.tensor(depth_value)
+                depth_value = depth_value.squeeze(-1)
+                weights = torch.tensor(weights)
+                weights = weights.squeeze(-1)
+                rays_depth = torch.cat([rays_o_col, rays_d_col], 1).half()
+                rays_depth = torch.cat([rays_depth, depth_value, weights], axis=1)
+
+                self.all_rays_depth += [rays_depth]
+        self.all_rays_depth = torch.cat(self.all_rays_depth, 0)
+        self.all_rays_depth = self.all_rays_depth.unsqueeze(0)
+        self.all_rays_depth = self.all_rays_depth.expand(self.n_frames, -1, -1)
+        self.all_rays_depth = self.all_rays_depth.reshape(-1, 8)
+
 
     def shift_stds(self):
         self.all_stds = self.all_stds_without_diffusion
@@ -463,7 +558,9 @@ class LLFFVideoDataset(Dataset):
 def _calc_std(frame_path_root, std_path_root, frame_start=0, n_frame=300):
     # if frame_start != 0:
     #     std_path_root = std_path_root+str(frame_start)
+    print("calc_std start")
     if os.path.exists(std_path_root):
+        print("std already exist")
         return
     os.makedirs(std_path_root)
     print(frame_path_root)
@@ -477,12 +574,13 @@ def _calc_std(frame_path_root, std_path_root, frame_start=0, n_frame=300):
         frames = []
         for fp in frame_paths:
             frame = Image.open(fp).convert('RGB')
-            frame = np.array(frame, dtype=np.float) / 255.
+            frame = np.array(frame, dtype=float) / 255.
             frames.append(frame)
         frame = np.stack(frames, axis=0)
         std_map = frame.std(axis=0).mean(axis=-1)
-        std_map_blur = (cv2.GaussianBlur(std_map, (31, 31), 0)).astype(np.float)
+        std_map_blur = (cv2.GaussianBlur(std_map, (31, 31), 0)).astype(float)
         np.save(std_path + '_std.npy', std_map_blur)
+        print("calc_std finish")
         print(frame_paths)
         # print(frame_path)
         # print(std_path + '_std.npy', frames[0].shape, std_map_blur.shape, std_map.shape)

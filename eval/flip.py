@@ -510,7 +510,7 @@ if __name__ == '__main__':
 
 	# Compute FLIP
 	dim = reference.shape
-	flip_array = np.zeros((dim[1], dim[2], num_test_images)).astype(np.float32)
+	flip_array = np.zeros((dim[1], dim[2], num_test_images)).astype(float32)
 	for idx, test_path in enumerate(args.test):
 		test_filename = test_path[test_path.rfind('/') + 1: test_path.rfind('.')]
 

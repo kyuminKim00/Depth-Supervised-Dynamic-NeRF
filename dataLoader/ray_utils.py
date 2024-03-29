@@ -6,6 +6,15 @@ from kornia import create_meshgrid
 
 # from utils import index_point_feature
 
+def get_rays_by_coord_np(H, W, focal, c2w, coords): #point(depth 존재)와 카메라까지의 ray 생성(DS_NeRF)
+#coords : 픽셀, c2w : 카메라 matrix
+    i, j = (coords[:,0]-W*0.5)/focal, -(coords[:,1]-H*0.5)/focal
+    dirs = np.stack([i,j,-np.ones_like(i)],-1)
+    rays_d = np.sum(dirs[..., np.newaxis, :] * c2w[:3,:3], -1)
+    rays_o = np.broadcast_to(c2w[:3,-1], np.shape(rays_d))
+    return rays_o, rays_d
+
+
 def depth2dist(z_vals, cos_angle):
     # z_vals: [N_ray N_sample]
     device = z_vals.device
