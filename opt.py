@@ -7,11 +7,11 @@ def config_parser(cmd=None):
                         help='config file path')
     parser.add_argument('--config', is_config_file=True,
                         help='config file path')
-    parser.add_argument('--use_depth', type=bool, default=True,
-                        help='use depth in train step')
+    parser.add_argument('--use_depth', type=int, default=0,
+                    help='use depth in train step')
     parser.add_argument("--expname", type=str,
                         help='experiment name')
-    parser.add_argument("--basedir", type=str, default='./log',
+    parser.add_argument("--basedir", type=str, default='../log',
                         help='where to store ckpts and logs')
     parser.add_argument("--add_timestamp", type=int, default=0,
                         help='add timestamp to dir')

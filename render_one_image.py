@@ -59,6 +59,7 @@ tensorf = eval(args.model_name)(args, kwargs['aabb'], kwargs['gridSize'], device
                                     )
 tensorf.load(ckpt)
 print("ckpt loaded!")
+savePath = args.basedir
 
 renderer = OctreeRender_trilinear_fast
 
@@ -87,12 +88,12 @@ with torch.no_grad():
         retva = renderer(rays, tensorf, std_train=None, chunk=args.batch_size*4, N_samples=-1,
                                 ndc_ray=args.ndc_ray, white_bg = False, device=device, with_grad=False,
                                 simplify=True, static_branch_only=False, temporal_indices=temporal_indices,
-                                remove_foreground=False, diff_calc=False, render_path=True, nodepth=True)
+                                remove_foreground=False, diff_calc=False, render_path=True, nodepth=False)
         retva = Namespace(**retva)
         retva.comp_rgb_map = retva.comp_rgb_map.clamp(0.0, 1.0)
-        savePath = args.basedir
-        nodepth = True
-        print(H, W)
+        
+        
+
         proc = multiprocessing.Process(target=write_video, args=(retva.comp_rgb_map.cpu(), savePath, 1, (None if nodepth else retva.comp_depth_map.cpu()), 30, 10,
                                                                  H, W, args.n_train_frames, near_fars))
         processings.append(proc)

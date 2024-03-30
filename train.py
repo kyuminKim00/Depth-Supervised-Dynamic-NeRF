@@ -236,7 +236,7 @@ def reconstruction(args):
     test_dataset = dataset(args.datadir, split='test', downsample=args.downsample_train, is_stack=True,
                            n_frames=args.n_frames, render_views=args.render_views, scene_box=args.scene_box,
                            temporal_variance_threshold=args.temporal_variance_threshold,
-                           frame_start=args.frame_start, near=args.near, far=args.far, diffuse_kernel=args.diffuse_kernel, use_depth = False)
+                           frame_start=args.frame_start, near=args.near, far=args.far, diffuse_kernel=args.diffuse_kernel, use_depth = 0)
     time_dataset_end = time.time()
     print(f'Loading Test Dataset: {time_dataset_end-time_dataset_start}s')
 
@@ -533,9 +533,17 @@ def reconstruction(args):
                                          .unsqueeze(dim=1).expand(-1, args.n_train_frames)[retva.ray_wise_temporal_mask].reshape(-1)
 
                     loss = (loss_ray_wise * loss_ray_weight).sum()/loss_ray_weight.sum()
+                    print("rgb loss : ", loss)
                     if args.use_depth:
-                        depth_loss = torch.mean(((retva_depth.static_depth_map - rays_train_depth[:, 6])**2) * rays_train_depth[:, 7])
-    
+                        #depth_loss = torch.mean(((retva_depth.static_depth_map - rays_train_depth[:, 6])**2) * rays_train_depth[:, 7])
+                        print("depthmap : ", retva_depth.static_depth_map)
+                        print("max depthmap : ", torch.max(retva_depth.static_depth_map))
+                        print("depth colmap : ", rays_train_depth[:, 6])
+                        print("max depthcolmap : ", torch.max(rays_train_depth[:, 6]))
+
+                        depth_loss = torch.mean((retva_depth.static_depth_map - rays_train_depth[:, 6])**2)
+                        print("depth_loss : ", depth_loss)
+
                     # hard_fraction = loss_mask.sum()/(loss_mask.shape[0])
                     Metrics['hfrac'].append(1.0)
                     # loss = ((retva.rgb_map - rgb_train[retva.ray_wise_temporal_mask])**2).mean()
@@ -546,6 +554,8 @@ def reconstruction(args):
                         total_loss += (loss + depth_lambda * depth_loss)
                     else:
                         total_loss += loss
+                    print("total_loss : ", total_loss)
+                    
 
                     Metrics['PSNRs'].append(-10.0 * np.log(loss.item()) / np.log(10.0))
                     Metrics['frac'].append(retva.fraction)

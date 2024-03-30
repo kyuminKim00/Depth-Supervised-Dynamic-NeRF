@@ -32,7 +32,7 @@ data
 |poses_bounds.npy  
 
 7. TRAIN  
-  python train.py --config [config] render_path 0  
+  python train.py --config [config] render_path 0 --use_depth 1  
 
 ---  
 - 하나의 view에서 동영상 렌더링   

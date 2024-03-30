@@ -274,7 +274,7 @@ class LLFFVideoDataset(Dataset): #torch.utils.data의 Dataset 클래스를 상�
                                  #불러 올 수 있다.
     def __init__(self, datadir, split='train', downsample=4.0, is_stack=False, hold_id=[0,], n_frames=100,
                  render_views=120, tmp_path='memory', scene_box=[-3.0, -1.67, -1.2], temporal_variance_threshold=1000,
-                 frame_start=0, near=0.0, far=1.0, diffuse_kernel=0, use_depth=True):
+                 frame_start=0, near=0.0, far=1.0, diffuse_kernel=0, use_depth=0):
         """
         spheric_poses: whether the images are taken in a spheric inward-facing manner
                        default: False (forward-facing)
@@ -295,14 +295,14 @@ class LLFFVideoDataset(Dataset): #torch.utils.data의 Dataset 클래스를 상�
         self.blender2opencv = np.eye(4)#np.array([[1, 0, 0, 0], [0, -1, 0, 0], [0, 0, -1, 0], [0, 0, 0, 1]])
         self.n_frames = n_frames
         self.frame_start = frame_start
-        print("read_meta 시작")
+        print("read_meta start")
         self.read_meta()
-        print("read_meta 끝")
+        print("read_meta done")
         
         if use_depth:
             print("read_depth start")
             self.read_depth()
-            print("read_depth down")
+            print("read_depth done")
 
         self.white_bg = False
 
@@ -489,7 +489,17 @@ class LLFFVideoDataset(Dataset): #torch.utils.data의 Dataset 클래스를 상�
     def read_depth(self):
         depth_gts = load_colmap_depth(self.root_dir)
         print("load_colmap_depth OK")
-        poses_bounds = np.load(os.path.join(self.root_dir, 'poses_bounds.npy'))  # (N_images, 17)
+        poses_bounds = np.load(os.path.join(self.root_dir, 'poses_bounds.npy'))  # (N_images, 17) #colmap으로 만든 pose or 논문 pose
+        
+        poses_bounds_colmap_path = os.path.join(self.root_dir, 'poses_bounds_colmap.npy')
+        
+        if os.path.exists(poses_bounds_colmap_path):
+            print("USE COLMAP POSE !!!!")
+            poses_bounds_colmap = np.load(poses_bounds_colmap_path)  # colmap으로 만든 pose
+            is_colmap_pose = 1
+        else:
+            is_colmap_pose = 0
+
         poses = poses_bounds[:, :15].reshape(-1, 3, 5)
 
         near_fars = poses_bounds[:, -2:]
@@ -509,8 +519,18 @@ class LLFFVideoDataset(Dataset): #torch.utils.data의 Dataset 클래스를 상�
 
         self.all_rays_depth = []
 
+        depth_z = 3 #임시
+
         for i in range(poses.shape[0]):
-            if i!=0: #0번째 카메라는 test 카메라로 depth 사용을 하지 않는다.
+            if i!=0: #0번째 카메라는 test 카메라로 depth train data로 사용 하지 않는다.
+                if is_colmap_pose:
+                    bound = poses_bounds_colmap[i, -1] - poses_bounds_colmap[i, -2]
+                    scale = bound / depth_z #임시
+
+                    bds_max = poses_bounds_colmap[i, -1]
+                else:
+                    bds_max = near_fars[i, -1]
+
                 c2w = torch.FloatTensor(poses[i])
                 c2w = c2w.numpy()
 
@@ -525,6 +545,7 @@ class LLFFVideoDataset(Dataset): #torch.utils.data의 Dataset 클래스를 상�
                 weights = depth_gts[i]['error'][:,None,None]
                 depth_value = torch.tensor(depth_value)
                 depth_value = depth_value.squeeze(-1)
+                depth_value = depth_value / scale #임시
                 weights = torch.tensor(weights)
                 weights = weights.squeeze(-1)
                 rays_depth = torch.cat([rays_o_col, rays_d_col], 1).half()

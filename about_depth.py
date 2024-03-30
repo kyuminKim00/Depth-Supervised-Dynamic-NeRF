@@ -195,11 +195,14 @@ def calculate_psnr_video(video_file1_path, video_file2_path):
 
 
     
-def get_depth_ray(depth_gts_path, poses_bounds):
+def get_depth_ray(depth_gts_path, poses_bounds, poses_bounds_colmap):
     depth_gts = load_colmap_depth(depth_gts_path)
     print("load_colmap_depth OK")
     poses_bounds = np.load(poses_bounds)
     print("poses_bounds OK")
+
+    poses_bounds_colmap = np.load(poses_bounds_colmap)
+
     poses, near_fars, H, W, focal, H, W, scale_factor = prepare_pose_etc(poses_bounds)
 
     directions = get_ray_directions_blender(H, W, focal)
@@ -211,8 +214,14 @@ def get_depth_ray(depth_gts_path, poses_bounds):
     video_list = i_test if split != 'train' else list(set(np.arange(len(poses))) - set(i_test))
 
     all_rays_depth = []
+    is_colmap_pose = 1
 
     for i in video_list:
+        if is_colmap_pose:
+            bds_max = poses_bounds_colmap[i, -1]
+        else:
+            bds_max = near_fars[i, -1]
+
         c2w = torch.FloatTensor(poses[i])
         c2w = c2w.numpy()
 
@@ -227,23 +236,23 @@ def get_depth_ray(depth_gts_path, poses_bounds):
         weights = depth_gts[i]['error'][:,None,None]
         depth_value = torch.tensor(depth_value)
         depth_value = depth_value.squeeze(-1)
+        depth_value = depth_value / bds_max
         weights = torch.tensor(weights)
         weights = weights.squeeze(-1)
         rays_depth = torch.cat([rays_o_col, rays_d_col], 1).half()
-        print(rays_depth.shape)
         rays_depth = torch.cat([rays_depth, depth_value, weights], axis=1)
 
         all_rays_depth += [rays_depth]
-        
+        print(bds_max)
+
     all_rays_depth = torch.cat(all_rays_depth, 0)
 
     frame = 300
     all_rays_depth = all_rays_depth.unsqueeze(0)
     all_rays_depth = all_rays_depth.expand(frame, -1, -1)
     all_rays_depth = all_rays_depth.reshape(-1, 8)
+    
 
-    print("all_rays_depth", all_rays_depth, end='\n') #ray_d는 다 다름
-    print("all_rays_depth.shape", all_rays_depth.shape, end='\n') #ray_d는 다 다름
     return all_rays_depth
 
 
@@ -278,23 +287,8 @@ def save_video_frames(video_path, output_folder):
 
 
 if __name__ == '__main__':
-    video_file1_path =  '/data2/kkm/km/mixvoxels_depth/log/video_cam5/frame_0016.png'
-    video_file2_path =  '/data2/kkm/km/data/flame_steak/frames_4/cam05/0016.png'
-    #output_path = '/data2/kkm/km/mixvoxels_depth/log/video_cam5'
-    # #calculate_psnr(video_file1_path,output_path)
-    psnr = calculate_psnr(video_file1_path, video_file2_path)
-    #save_video_frames(video_file1_path, output_path)
-    print(psnr)
-    # tensor([[ 0.9956,  0.0075,  0.0936,  0.2660],  cam5 pose(GT)
-    #     [ 0.0148, -0.9968, -0.0784, -0.3069],
-    #     [ 0.0927,  0.0795, -0.9925, -0.0692]])
-
-    # cam5 = np.load("/data2/kkm/km/data/flame_steak/poses_bounds.npy")
-    
-    # poses, near_fars, H, W, focal, H, W, scale_factor = prepare_pose_etc(cam5)
-    # pose = poses[5, :, :]
-    # printdatasetINFO(5, cam5)
-    # print(pose)
-    # depth_gts = load_colmap_depth("/data2/kkm/km/mixvoxels_depth/data/flame_steak")
-    # depth_value = depth_gts[1]['depth'][:,None,None]
-    # print(depth_value)
+    depth_gts_path = '/data2/kkm/km/data/flame_steak'
+    poses_bounds = '/data2/kkm/km/data/flame_steak/poses_bounds.npy'
+    poses_bounds_colmap = '/data2/kkm/km/data/flame_steak/poses_bounds_colmap.npy'
+    depth_ray = get_depth_ray(depth_gts_path, poses_bounds, poses_bounds_colmap)
+    print(depth_ray)

@@ -384,6 +384,7 @@ def load_colmap_depth(basedir, factor=4, bd_factor=.75):
     # json.dump(data_list, open(data_file, "w"))
     np.save(data_file, data_list)
     print("extract Depth done!")
+    
     return data_list
 
 def load_sensor_depth(basedir, factor=8, bd_factor=.75):
