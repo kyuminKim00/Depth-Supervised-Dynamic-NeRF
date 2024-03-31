@@ -196,7 +196,7 @@ def calculate_psnr_video(video_file1_path, video_file2_path):
 
     
 def get_depth_ray(depth_gts_path, poses_bounds, poses_bounds_colmap):
-    depth_gts = load_colmap_depth(depth_gts_path)
+    depth_gts, far = load_colmap_depth(depth_gts_path)
     print("load_colmap_depth OK")
     poses_bounds = np.load(poses_bounds)
     print("poses_bounds OK")

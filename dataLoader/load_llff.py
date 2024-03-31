@@ -355,6 +355,7 @@ def load_colmap_depth(basedir, factor=4, bd_factor=.75):
     
     near = np.ndarray.min(bds_raw) * .9 * sc
     far = np.ndarray.max(bds_raw) * 1. * sc
+    print('sc :', sc)
     print('near/far:', near, far)
 
     data_list = []
@@ -368,7 +369,8 @@ def load_colmap_depth(basedir, factor=4, bd_factor=.75):
             if id_3D == -1:
                 continue
             point3D = points[id_3D].xyz
-            depth = (poses[id_im-1,:3,2].T @ (point3D - poses[id_im-1,:3,3])) * sc
+            depth = ((poses[id_im-1,:3,2].T @ (point3D - poses[id_im-1,:3,3])) * sc)
+            
             if depth < bds_raw[id_im-1,0] * sc or depth > bds_raw[id_im-1,1] * sc:
                 continue
             err = points[id_3D].error
@@ -385,7 +387,7 @@ def load_colmap_depth(basedir, factor=4, bd_factor=.75):
     np.save(data_file, data_list)
     print("extract Depth done!")
     
-    return data_list
+    return data_list, far
 
 def load_sensor_depth(basedir, factor=8, bd_factor=.75):
     data_file = Path(basedir) / 'colmap_depth.npy'

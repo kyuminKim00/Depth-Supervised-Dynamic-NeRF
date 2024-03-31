@@ -372,6 +372,7 @@ def reconstruction(args):
     #print("allstds", allstds, end="\n")
     print("allstds.shape : ", allstds.shape, end="\n")
     if args.use_depth:
+        print("USE DEPTH !!!")
         allrays_depth = train_dataset.all_rays_depth #[300, 1277, 8] [300프레임, ray개수, (rays_o, rays_d, depth, weights)]
                                                     #를 reshape(-1, 8) 로 핌 ([383100, 8])
         print("allrays_depth.shape : ", allrays_depth.shape, end="\n")
@@ -479,7 +480,7 @@ def reconstruction(args):
                                     N_samples=nSamples, white_bg = white_bg, ndc_ray=ndc_ray,
                                     device=device, is_train=True, rgb_train=rgb_train,
                                     temporal_indices=temporal_indices, static_branch_only=args.static_branch_only,
-                                    std_train=std_train, nodepth=True)
+                                    std_train=std_train, nodepth=False)
             retva = Namespace(**retva)
             
             
@@ -488,7 +489,7 @@ def reconstruction(args):
                                         N_samples=nSamples, white_bg = white_bg, ndc_ray=ndc_ray,
                                         device=device, is_train=True, rgb_train=None,
                                         temporal_indices=temporal_indices, static_branch_only=True,
-                                        std_train=None, nodepth=True)
+                                        std_train=None, nodepth=False)
                 retva_depth = Namespace(**retva_depth)
             # print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=10))
             
@@ -536,10 +537,13 @@ def reconstruction(args):
                     print("rgb loss : ", loss)
                     if args.use_depth:
                         #depth_loss = torch.mean(((retva_depth.static_depth_map - rays_train_depth[:, 6])**2) * rays_train_depth[:, 7])
-                        print("depthmap : ", retva_depth.static_depth_map)
+                        print("depthmap_depth : ", retva_depth.static_depth_map)
+                        print("depthmap_retva : ", retva.static_depth_map)
                         print("max depthmap : ", torch.max(retva_depth.static_depth_map))
-                        print("depth colmap : ", rays_train_depth[:, 6])
-                        print("max depthcolmap : ", torch.max(rays_train_depth[:, 6]))
+                        print("min depthmap : ", torch.min(retva_depth.static_depth_map))
+                      
+                        #print("depth colmap : ", rays_train_depth[:, 6])
+                        #print("max depthcolmap : ", torch.max(rays_train_depth[:, 6]))
 
                         depth_loss = torch.mean((retva_depth.static_depth_map - rays_train_depth[:, 6])**2)
                         print("depth_loss : ", depth_loss)
@@ -549,7 +553,7 @@ def reconstruction(args):
                     # loss = ((retva.rgb_map - rgb_train[retva.ray_wise_temporal_mask])**2).mean()
 
 
-                    depth_lambda = 0.1 #depth loss 가중치, 하이퍼파라미터
+                    depth_lambda = 0.3 #depth loss 가중치, 하이퍼파라미터
                     if args.use_depth:
                         total_loss += (loss + depth_lambda * depth_loss)
                     else:

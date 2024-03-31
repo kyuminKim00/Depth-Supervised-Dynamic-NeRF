@@ -487,19 +487,10 @@ class LLFFVideoDataset(Dataset): #torch.utils.data의 Dataset 클래스를 상�
 
 
     def read_depth(self):
-        depth_gts = load_colmap_depth(self.root_dir)
+        depth_gts, far = load_colmap_depth(self.root_dir, factor=int(self.downsample), bd_factor=.75)
         print("load_colmap_depth OK")
         poses_bounds = np.load(os.path.join(self.root_dir, 'poses_bounds.npy'))  # (N_images, 17) #colmap으로 만든 pose or 논문 pose
         
-        poses_bounds_colmap_path = os.path.join(self.root_dir, 'poses_bounds_colmap.npy')
-        
-        if os.path.exists(poses_bounds_colmap_path):
-            print("USE COLMAP POSE !!!!")
-            poses_bounds_colmap = np.load(poses_bounds_colmap_path)  # colmap으로 만든 pose
-            is_colmap_pose = 1
-        else:
-            is_colmap_pose = 0
-
         poses = poses_bounds[:, :15].reshape(-1, 3, 5)
 
         near_fars = poses_bounds[:, -2:]
@@ -523,13 +514,6 @@ class LLFFVideoDataset(Dataset): #torch.utils.data의 Dataset 클래스를 상�
 
         for i in range(poses.shape[0]):
             if i!=0: #0번째 카메라는 test 카메라로 depth train data로 사용 하지 않는다.
-                if is_colmap_pose:
-                    bound = poses_bounds_colmap[i, -1] - poses_bounds_colmap[i, -2]
-                    scale = bound / depth_z #임시
-
-                    bds_max = poses_bounds_colmap[i, -1]
-                else:
-                    bds_max = near_fars[i, -1]
 
                 c2w = torch.FloatTensor(poses[i])
                 c2w = c2w.numpy()
@@ -545,7 +529,7 @@ class LLFFVideoDataset(Dataset): #torch.utils.data의 Dataset 클래스를 상�
                 weights = depth_gts[i]['error'][:,None,None]
                 depth_value = torch.tensor(depth_value)
                 depth_value = depth_value.squeeze(-1)
-                depth_value = depth_value / scale #임시
+                depth_value = depth_value / far
                 weights = torch.tensor(weights)
                 weights = weights.squeeze(-1)
                 rays_depth = torch.cat([rays_o_col, rays_d_col], 1).half()
