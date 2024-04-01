@@ -67,7 +67,7 @@ pose_path =  os.path.join(args.datadir, "poses_bounds.npy")
 #pose_path = "~~" # poses_bounds.npy 위치 직접 지정
 poses_bounds = np.load(pose_path)
 poses, near_fars, H, W, focal, H, W, scale_factor = prepare_pose_etc(poses_bounds, 4)
-c2w = poses[2, :, :] # 0, 1, 2 카메라 번호 명시, 0번째 카메라 위치에서 렌더링 진행, 
+c2w = poses[0, :, :] # 0, 1, 2 카메라 번호 명시, 0번째 카메라 위치에서 렌더링 진행, 
 print("poses_bounds OK")
 
 directions = get_ray_directions_blender(H, W, focal)
@@ -90,7 +90,9 @@ with torch.no_grad():
                                 simplify=True, static_branch_only=True, temporal_indices=temporal_indices,
                                 remove_foreground=False, diff_calc=False, render_path=True, nodepth=False)
         retva = Namespace(**retva)
-        print(retva.comp_depth_map)
+        print((retva.static_depth_map).shape)
+        retva.static_depth_map = retva.static_depth_map.cpu().numpy()
+        np.save('/data2/kkm/km/mixvoxels_depth/cam0_5', retva.static_depth_map)
         #retva.comp_rgb_map = retva.comp_rgb_map.clamp(0.0, 1.0)
         
         

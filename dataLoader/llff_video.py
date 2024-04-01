@@ -451,7 +451,6 @@ class LLFFVideoDataset(Dataset): #torch.utils.data의 Dataset 클래스를 상�
             print(str(i) + " OK!")
 
         if not self.is_stack:
-            print("is stack false")
             
             self.all_rays_weight = torch.cat(self.all_rays_weight, dim=0) # (Nr)
             self.all_rays = torch.cat(self.all_rays, 0) # (len(self.meta['frames])*h*w, 3)
@@ -466,14 +465,13 @@ class LLFFVideoDataset(Dataset): #torch.utils.data의 Dataset 클래스를 상�
             print("ray: " + str(self.all_rays.shape))
             print("rgb: " + str(self.all_rgbs.shape))
             print("stds: " + str(self.all_stds.shape))
-            print("다이나믹 마스크: " + str(dynamic_mask.shape))
 
             self.dynamic_stds = self.all_stds[dynamic_mask]
-            print("std OK!")
+       
             self.dynamic_rays = self.all_rays[dynamic_mask]
-            print("ray OK!")
+          
             self.dynamic_rgbs = self.all_rgbs[dynamic_mask]
-            print("rgb OK!")
+
             
         else:
             print("is stack true")
@@ -510,13 +508,13 @@ class LLFFVideoDataset(Dataset): #torch.utils.data의 Dataset 클래스를 상�
 
         self.all_rays_depth = []
 
-        depth_z = 3 #임시
-
         for i in range(poses.shape[0]):
             if i!=0: #0번째 카메라는 test 카메라로 depth train data로 사용 하지 않는다.
 
                 c2w = torch.FloatTensor(poses[i])
                 c2w = c2w.numpy()
+                
+                #depth_gts[i]['coord'][:, 1] = (int(H/self.downsample)-depth_gts[i]['coord'][:, 1]) #y축 반전
 
                 rays_o_col, rays_d_col = get_rays_by_coord_np(H, W, focal_[0], c2w, depth_gts[i]['coord'])
                 rays_o_col = torch.tensor(rays_o_col)
@@ -529,7 +527,7 @@ class LLFFVideoDataset(Dataset): #torch.utils.data의 Dataset 클래스를 상�
                 weights = depth_gts[i]['error'][:,None,None]
                 depth_value = torch.tensor(depth_value)
                 depth_value = depth_value.squeeze(-1)
-                depth_value = depth_value / far
+                depth_value = depth_value / 5.38
                 weights = torch.tensor(weights)
                 weights = weights.squeeze(-1)
                 rays_depth = torch.cat([rays_o_col, rays_d_col], 1).half()

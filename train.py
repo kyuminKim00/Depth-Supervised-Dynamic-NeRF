@@ -445,9 +445,14 @@ def reconstruction(args):
         rays_train, rgb_train, std_train = allrays[ray_idx].to(device).float(), allrgbs[ray_idx].to(device).float(), allstds[ray_idx].to(device).float()
         
         if args.use_depth:
+            print("rays_idx_depth", rays_idx_depth)
             rays_idx_depth = trainingSampler_depth.nextids(gamma_current)
+            print("allrays_depth", allrays_depth)
+            print("allrays_depth shape", allrays_depth.shape)
+
             rays_train_depth = allrays_depth[rays_idx_depth].to(device)
-            
+            print("rays_train_depth", rays_train_depth)
+            print("rays_train_depth shape", rays_train_depth.shape)
 
         # print("rays_train", rays_train)
         # print("rays_train.shape", rays_train.shape)
@@ -459,7 +464,26 @@ def reconstruction(args):
 
         #여기에 train된 ray가 존재함, std_train으로 복셀이 정적/동적 인지 구별함(?)
         args.static_branch_only = args.static_branch_only_initial
+        print(rgb_train)
+        print(rgb_train.shape)
         temporal_indices, supervision_rgb_train = temporal_sampler.sample(rgb_train, iteration)
+        print("temporal_indices", temporal_indices.shape)
+        print("temporal_indices", temporal_indices)
+        print("supervision_rgb_train", supervision_rgb_train.shape)
+        print("supervision_rgb_train", supervision_rgb_train)
+        rays_train_depth = rays_train_depth.cpu().numpy()
+        rays_train_depth = np.expand_dims(rays_train_depth, axis=-1)
+        rays_train_depth = torch.from_numpy(rays_train_depth).to(device)
+
+        print(rays_train_depth)
+        print(rays_train_depth.shape)
+
+        temporal_indices_depth, supervision_depth_train = temporal_sampler.sample(rays_train_depth, iteration)
+        print("temporal_indices_depth", temporal_indices_depth.shape)
+        print("temporal_indices_depth", temporal_indices_depth)
+        print("supervision_depth_train", supervision_depth_train.shape)
+       # print("supervision_depth_train", supervision_depth_train)
+        #
         #rgb_map, alphas_map, depth_map, weights, uncertainty
         time_ = time.time()
         timing['pre'] = time_ - _time
@@ -473,7 +497,7 @@ def reconstruction(args):
             # print("nSamples", nSamples)
             # print("white_bg", white_bg)
             # print("ndc_ray", ndc_ray)
-            # print("temporal_indices", temporal_indices.shape)
+            # print("temporal_indices", temporal_indices)
             # print("static_branch_only", args.static_branch_only)
 
             retva = renderer(rays_train, tensorf, chunk=current_batch_size,
@@ -538,9 +562,11 @@ def reconstruction(args):
                     if args.use_depth:
                         #depth_loss = torch.mean(((retva_depth.static_depth_map - rays_train_depth[:, 6])**2) * rays_train_depth[:, 7])
                         print("depthmap_depth : ", retva_depth.static_depth_map)
-                        print("depthmap_retva : ", retva.static_depth_map)
+                        print("depthmap_colmap : ",  rays_train_depth[:, 6])
                         print("max depthmap : ", torch.max(retva_depth.static_depth_map))
                         print("min depthmap : ", torch.min(retva_depth.static_depth_map))
+                        print("max colmap : ", torch.max(rays_train_depth[:, 6]))
+                        print("min colmap : ", torch.min(rays_train_depth[:, 6]))
                       
                         #print("depth colmap : ", rays_train_depth[:, 6])
                         #print("max depthcolmap : ", torch.max(rays_train_depth[:, 6]))
@@ -553,7 +579,7 @@ def reconstruction(args):
                     # loss = ((retva.rgb_map - rgb_train[retva.ray_wise_temporal_mask])**2).mean()
 
 
-                    depth_lambda = 0.3 #depth loss 가중치, 하이퍼파라미터
+                    depth_lambda = 1.5 #depth loss 가중치, 하이퍼파라미터
                     if args.use_depth:
                         total_loss += (loss + depth_lambda * depth_loss)
                     else:

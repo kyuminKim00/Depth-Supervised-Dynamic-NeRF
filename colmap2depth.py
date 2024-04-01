@@ -10,4 +10,4 @@ parser.add_argument('scenedir', type=str,
 args = parser.parse_args()
 
 if __name__=='__main__':
-    load_colmap_depth(args.scenedir, 4)
+    load_colmap_depth(args.scenedir, downsampe=4, bd_factor=.75)
