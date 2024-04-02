@@ -342,10 +342,8 @@ class TemporalSampler:
                 samples.append(random.choice(self.choices[i]))
         else:
             samples = self.samples
-        if rgb_train is not None:   
-            if rgb_train.ndim == 2:  # If the shape is [3065, 300]
-                rgb_train = np.expand_dims(rgb_train, axis=-1)  # Add the missing dimension
-        # Select samples and transpose rgb_train
+        if rgb_train is not None:
+    
             return np.array(samples), rgb_train.transpose(0, 1)[samples].transpose(0, 1)
         else:
             return np.array(samples)

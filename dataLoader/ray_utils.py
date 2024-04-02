@@ -5,7 +5,11 @@ from kornia import create_meshgrid
 
 
 # from utils import index_point_feature
-
+def make_coords(H, W):
+    y_coords, x_coords = np.meshgrid(np.arange(H), np.arange(W), indexing='ij')
+    coords = np.stack((y_coords, x_coords), axis=-1).reshape(-1, 2)
+    return coords
+    
 def get_rays_by_coord_np(H, W, focal, c2w, coords): #point(depth 존재)와 카메라까지의 ray 생성(DS_NeRF)
 #coords : 픽셀, c2w : 카메라 matrix
     i, j = (coords[:,0]-W*0.5)/focal, -(coords[:,1]-H*0.5)/focal

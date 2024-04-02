@@ -330,17 +330,15 @@ class LLFFVideoDataset(Dataset): #torch.utils.data의 Dataset 클래스를 상�
         if self.downsample == 1.0:
             self.video_paths = sorted(glob.glob(os.path.join(self.root_dir, F'frames/*')))
             print("video", self.video_paths)
-            print("sorted OK!")
         else:
             _minify(self.root_dir, factors=[int(self.downsample), ])
             self.video_paths = sorted(glob.glob(os.path.join(self.root_dir, 'frames_{}/*'.format(int(self.downsample)))))
             self.video_paths = list(filter(lambda x: not x.endswith('.npy'), self.video_paths))
-            
-        print("before cal_std")
+
         _calc_std(os.path.join(self.root_dir, 'frames'+('' if self.downsample == 1.0 else '_{}'.format(int(self.downsample)))),
                   os.path.join(self.root_dir, 'stds'+('' if self.frame_start==0 else str(self.frame_start))+('' if self.downsample == 1.0 else '_{}'.format(int(self.downsample)))),
                   frame_start=self.frame_start, n_frame=self.n_frames)
-        print("after cal_std")
+
         if 'coffee_martini' in self.root_dir:
             print('====================deletting unsynchronized video==============')
             poses_bounds = np.concatenate([poses_bounds[:12], poses_bounds[13:]], axis=0)
@@ -361,7 +359,7 @@ class LLFFVideoDataset(Dataset): #torch.utils.data의 Dataset 클래스를 상�
         H, W, self.focal = poses[0, :, -1]  # original intrinsics, same for all images
         self.img_wh = np.array([int(W / self.downsample), int(H / self.downsample)])
         self.focal = [self.focal * self.img_wh[0] / W, self.focal * self.img_wh[1] / H]
-
+        print("focal : ", self.focal)
         # Step 2: correct poses
         # Original poses has rotation in form "down right back", change to "right up back"
         # See https://github.com/bmild/nerf/issues/34
@@ -406,11 +404,22 @@ class LLFFVideoDataset(Dataset): #torch.utils.data의 Dataset 클래스를 상�
         self.all_stds_without_diffusion = []
         self.all_rays_weight = []
         self.all_stds = []
+        
         for i in video_list:
             video_path = self.video_paths[i]
             print(video_path)
+
             c2w = torch.FloatTensor(self.poses[i])
-    
+            c2w = c2w.numpy()
+
+            coords = make_coords(H, W)
+            rays_o, rays_d = get_rays_by_coord_np(H, W, self.focal[0], c2w, coords)
+            rays_o = torch.tensor(rays_o)
+            rays_d = torch.tensor(rays_d)
+            rays_o, rays_d = ndc_rays_blender(H, W, self.focal[0], 1.0, rays_o, rays_d)
+            #rays_o = rays_o.float()
+            #rays_d = rays_d.float()
+            
             frames_paths = sorted(os.listdir(video_path))[self.frame_start:self.frame_start+self.n_frames][::(self.n_frames//self.n_frames)]
             #print("frames_paths OK!")
             std_path = video_path.replace('frames', 'stds'+('' if self.frame_start==0 else str(self.frame_start))) + '_std.npy'
@@ -443,10 +452,10 @@ class LLFFVideoDataset(Dataset): #torch.utils.data의 Dataset 클래스를 상�
             if std_frames_without_diffuse is not None:
                 self.all_stds_without_diffusion += [std_frames_without_diffuse.half()]
             print("std " + str(i) + " OK!")
-            rays_o, rays_d = get_rays(self.directions, c2w)# both (h*w, 3)
-            rays_o, rays_d = ndc_rays_blender(H, W, self.focal[0], 1.0, rays_o, rays_d)
+            # c2w = torch.FloatTensor(c2w)
+            # rays_o, rays_d = get_rays(self.directions, c2w)# both (h*w, 3)
+            # rays_o, rays_d = ndc_rays_blender(H, W, self.focal[0], 1.0, rays_o, rays_d)
             # viewdir = rays_d / torch.norm(rays_d, dim=-1, keepdim=True)
-
             self.all_rays += [torch.cat([rays_o, rays_d], 1).half()]  # (h*w, 6)
             print(str(i) + " OK!")
 
@@ -487,47 +496,31 @@ class LLFFVideoDataset(Dataset): #torch.utils.data의 Dataset 클래스를 상�
     def read_depth(self):
         depth_gts, far = load_colmap_depth(self.root_dir, factor=int(self.downsample), bd_factor=.75)
         print("load_colmap_depth OK")
-        poses_bounds = np.load(os.path.join(self.root_dir, 'poses_bounds.npy'))  # (N_images, 17) #colmap으로 만든 pose or 논문 pose
-        
-        poses = poses_bounds[:, :15].reshape(-1, 3, 5)
 
-        near_fars = poses_bounds[:, -2:]
-        H, W, focal_ = poses[0, :, -1]
-
-        img_wh_ = np.array([int(W / self.downsample), int(H / self.downsample)])
-        focal_ = [focal_ * img_wh_[0] / W, focal_ * img_wh_[1] / H]
-  
-        poses = np.concatenate([poses[..., 1:2], -poses[..., :1], poses[..., 2:4]], -1)
-        near_original = near_fars.min()
-        scale_factor = near_original * 0.75
-        near_fars /= scale_factor #bds_min, bds_max는 정규화 되는게 아니라 scale_factor에 따라서 스케일이 정해짐
-        poses[..., 3] /= scale_factor 
-        W, H = img_wh_
-
-        directions = get_ray_directions_blender(H, W, focal_)
-
+        W, H = self.img_wh
+        self.poses
         self.all_rays_depth = []
 
-        for i in range(poses.shape[0]):
+        for i in range(self.poses.shape[0]):
             if i!=0: #0번째 카메라는 test 카메라로 depth train data로 사용 하지 않는다.
 
-                c2w = torch.FloatTensor(poses[i])
+                c2w = torch.FloatTensor(self.poses[i])
                 c2w = c2w.numpy()
                 
                 #depth_gts[i]['coord'][:, 1] = (int(H/self.downsample)-depth_gts[i]['coord'][:, 1]) #y축 반전
-
-                rays_o_col, rays_d_col = get_rays_by_coord_np(H, W, focal_[0], c2w, depth_gts[i]['coord'])
+                
+                rays_o_col, rays_d_col = get_rays_by_coord_np(H, W, self.focal[0], c2w, depth_gts[i]['coord'])
                 rays_o_col = torch.tensor(rays_o_col)
                 rays_d_col = torch.tensor(rays_d_col)
-                rays_o_col, rays_d_col = ndc_rays_blender(H, W, focal_[0], 1.0, rays_o_col, rays_d_col)
-                rays_o_col = rays_o_col.float()
-                rays_d_col = rays_d_col.float()
+                rays_o_col, rays_d_col = ndc_rays_blender(H, W, self.focal[0], 1.0, rays_o_col, rays_d_col)
+                #rays_o_col = rays_o_col.float()
+                #rays_d_col = rays_d_col.float()
 
                 depth_value = depth_gts[i]['depth'][:,None,None]
                 weights = depth_gts[i]['error'][:,None,None]
                 depth_value = torch.tensor(depth_value)
                 depth_value = depth_value.squeeze(-1)
-                depth_value = depth_value / 5.38
+                depth_value = depth_value / 21.5
                 weights = torch.tensor(weights)
                 weights = weights.squeeze(-1)
                 rays_depth = torch.cat([rays_o_col, rays_d_col], 1).half()
@@ -535,8 +528,9 @@ class LLFFVideoDataset(Dataset): #torch.utils.data의 Dataset 클래스를 상�
 
                 self.all_rays_depth += [rays_depth]
         self.all_rays_depth = torch.cat(self.all_rays_depth, 0)
+       
         self.all_rays_depth = self.all_rays_depth.unsqueeze(0)
-        self.all_rays_depth = self.all_rays_depth.expand(self.n_frames, -1, -1)
+        
         self.all_rays_depth = self.all_rays_depth.reshape(-1, 8)
 
 
