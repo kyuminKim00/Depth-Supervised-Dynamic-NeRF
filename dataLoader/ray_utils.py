@@ -18,6 +18,24 @@ def get_rays_by_coord_np(H, W, focal, c2w, coords): #point(depth 존재)와 카�
     rays_o = np.broadcast_to(c2w[:3,-1], np.shape(rays_d))
     return rays_o, rays_d
 
+def get_direction_by_coord_np(H, W, focal, coords, center=None):
+    
+    coord = coords['coord']
+    depth = coords['depth']
+
+    # 이미지 중심이 제공되지 않은 경우, 이미지의 중심을 사용
+    cent = center if center is not None else [W / 2, H / 2]
+    directions = torch.zeros((H, W, 3))
+    depth_gt = torch.zeros((H, W, 1))
+    for index, coord_ in enumerate(coord):
+        x, y = coord_ # coord에서 x, y 좌표 추출
+        x = int(x)
+        y = int(y)
+        direction = torch.tensor([(x + 0.5 - cent[0]) / focal[0], -(y + 0.5 - cent[1]) / focal[0], -1.0], dtype=torch.float32)
+        directions[y, x, :] = direction
+        depth_gt[y, x, :] = depth[index]
+    return directions, depth_gt
+
 
 def depth2dist(z_vals, cos_angle):
     # z_vals: [N_ray N_sample]
@@ -45,8 +63,9 @@ def get_ray_directions(H, W, focal, center=None):
         directions: (H, W, 3), the direction of the rays in camera coordinate
     """
     grid = create_meshgrid(H, W, normalized_coordinates=False)[0] + 0.5
-
+    print(grid)
     i, j = grid.unbind(-1)
+    print(i.shape)
     # the direction here is without +0.5 pixel centering as calibration is not so accurate
     # see https://github.com/bmild/nerf/issues/24
     cent = center if center is not None else [W / 2, H / 2]
