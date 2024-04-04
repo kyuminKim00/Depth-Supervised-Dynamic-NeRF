@@ -443,7 +443,6 @@ class LLFFVideoDataset(Dataset): #torch.utils.data의 Dataset 클래스를 상�
                 self.all_stds_without_diffusion += [std_frames_without_diffuse.half()]
             print("std " + str(i) + " OK!")
 
-            #c2w = torch.FloatTensor(c2w)
             rays_o, rays_d = get_rays(self.directions, c2w)# both (h*w, 3)
             rays_o, rays_d = ndc_rays_blender(H, W, self.focal[0], 1.0, rays_o, rays_d)
             viewdir = rays_d / torch.norm(rays_d, dim=-1, keepdim=True)

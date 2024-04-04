@@ -365,16 +365,13 @@ def reconstruction(args):
 
     batch_factor = [1, 1, 1, 1] if args.batch_factor == [] else args.batch_factor
     allrays, allrgbs, allstds = train_dataset.all_rays, train_dataset.all_rgbs, train_dataset.all_stds
-    #print("allrays", allrays, end="\n")
     print("allrays.shape : ", allrays.shape, end="\n") #allrays.shape torch.Size([1028196, 6])
-    #print("allrgbs", allrgbs, end="\n")
     print("allrgbs.shape : ", allrgbs.shape, end="\n")
-    #print("allstds", allstds, end="\n")
     print("allstds.shape : ", allstds.shape, end="\n")
     if args.use_depth:
         print("USE DEPTH !!!")
-        allrays_depth = train_dataset.all_rays_depth #(H*W, 3)
-        all_depth = train_dataset.all_depth
+        allrays_depth = train_dataset.all_rays_depth #(H*W, 6)
+        all_depth = train_dataset.all_depth #(H*W, frames, 1)
         print("allrays_depth.shape : ", allrays_depth.shape, end="\n")
         print("all_depth.shape : ", all_depth.shape, end="\n")
 
@@ -387,11 +384,7 @@ def reconstruction(args):
         print("=================SimpleRay========================") #동적인 영역 학습?
         print('All Rays: {}'.format(allrays.shape[0]))
         trainingSampler = SimpleSampler(allrays.shape[0], current_batch_size)
-        # if args.use_depth:
-        #     depth_batch_size = round((current_batch_size*allrays_depth.shape[0])/allrays.shape[0])
-        #     trainingSampler_depth = SimpleSampler(allrays_depth.shape[0], depth_batch_size)
-        #     print("depth_batch_size : ", depth_batch_size)
-        
+        trainingSampler_depth = SimpleSampler(allrays_depth.shape[0], current_batch_size)
 
     elif args.ray_sampler == 'weighted':
         trainingSampler = WeightedRaySampler(allrays.shape[0], current_batch_size, train_dataset.all_rays_weight)
@@ -415,8 +408,8 @@ def reconstruction(args):
     if args.temporal_sampler == 'simple':
         print("=================SimpleTemporal========================") #정적인 영역 학습?
         temporal_sampler = TemporalSampler(args.n_frames, args.n_train_frames)
-        #temporal_depth_sampler = TemporalSampler(args.n_frames, args.n_train_frames)
-
+        temporal_sampler_depth = TemporalSampler(args.n_frames, args.n_train_frames)
+        
     elif args.temporal_sampler == 'weighted':
         temporal_sampler = TemporalWeightedSampler(args.n_frames, args.n_train_frames, args.temperature_start,
                                                    args.temperature_end, args.n_iters, args.temporal_sampler_replace,
@@ -451,8 +444,11 @@ def reconstruction(args):
 
 
         if args.use_depth:
-            depth_train = all_depth[ray_idx].to(device).float()
-            temporal_indices_depth, supervision_depth_train = temporal_sampler.sample(depth_train, iteration)
+            ray_idx_depth = trainingSampler_depth.nextids(gamma=gamma_current)
+            rays_train_depth = allrays_depth[ray_idx_depth].to(device).float()
+            depth_train = all_depth[ray_idx_depth].to(device).float()
+
+            temporal_indices_depth, supervision_depth_train = temporal_sampler_depth.sample(depth_train, iteration)
             
 
         #rgb_map, alphas_map, depth_map, weights, uncertainty
@@ -479,13 +475,21 @@ def reconstruction(args):
             retva = Namespace(**retva)
             
             
-            # if args.use_depth:
-            #     retva_depth = renderer(rays_train_depth, tensorf, chunk=current_batch_size,
-            #                             N_samples=nSamples, white_bg = white_bg, ndc_ray=ndc_ray,
-            #                             device=device, is_train=True, rgb_train=None,
-            #                             temporal_indices=temporal_indices_depth, static_branch_only=True,
-            #                             std_train=None, nodepth=False)
-            #     retva_depth = Namespace(**retva_depth)
+            if args.use_depth:
+                print(torch.isnan(rays_train_depth).any())
+                print(torch.isnan(depth_train).any())
+                print(torch.isnan(temporal_indices_depth).any())
+                print(torch.isnan(supervision_depth_train).any())
+
+
+                retva_depth = renderer(rays_train_depth, tensorf, chunk=current_batch_size,
+                                        N_samples=nSamples, white_bg = white_bg, ndc_ray=ndc_ray,
+                                        device=device, is_train=True, rgb_train=None,
+                                        temporal_indices=temporal_indices_depth, static_branch_only=True,
+                                        std_train=None, nodepth=False)
+                retva_depth = Namespace(**retva_depth)
+                print(retva_depth.static_depth_map)
+                
             # print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=10))
             
 
@@ -505,7 +509,7 @@ def reconstruction(args):
             #args.static_dynamic_seperate = 1
             if args.static_dynamic_seperate:
                 if not args.static_branch_only:
-                    # supervision_rgb_train = rgb_train.transpose(0,1)[temporal_indices].transpose(0,1)
+
                     if args.dy_loss == 'l2':
                         loss_ray_wise = ((retva.rgb_map - supervision_rgb_train[retva.ray_wise_temporal_mask])**2)
                     elif args.dy_loss == 'l1':
@@ -531,7 +535,6 @@ def reconstruction(args):
                                          .unsqueeze(dim=1).expand(-1, args.n_train_frames)[retva.ray_wise_temporal_mask].reshape(-1)
 
                     loss = (loss_ray_wise * loss_ray_weight).sum()/loss_ray_weight.sum()
-                    print("rgb loss : ", loss)
                     if args.use_depth:
                         depth_loss = 0
                         index = 0
@@ -540,24 +543,20 @@ def reconstruction(args):
                                 index += 1
                                 continue 
                             else:
-                                print("DEPTH : ", i)
-                                print("MAP : ", retva.static_depth_map[index])
-                                depth_loss += torch.mean((retva.static_depth_map[index] - i)**2)
+                                depth_loss += torch.mean((retva_depth.static_depth_map[index] - i)**2)
                                 index += 1
 
-                        print("total_depth_loss : ", total_depth_loss)
                         total_depth_loss += depth_loss 
                     # hard_fraction = loss_mask.sum()/(loss_mask.shape[0])
                     Metrics['hfrac'].append(1.0)
                     # loss = ((retva.rgb_map - rgb_train[retva.ray_wise_temporal_mask])**2).mean()
 
 
-                    depth_lambda = 0.1 #depth loss 가중치, 하이퍼파라미터
+                    depth_lambda = 10000 #depth loss 가중치, 하이퍼파라미터
                     if args.use_depth:
                         total_loss += (loss + depth_lambda * total_depth_loss)
                     else:
                         total_loss += loss
-                    print("total_loss : ", total_loss)
                     
 
                     Metrics['PSNRs'].append(-10.0 * np.log(loss.item()) / np.log(10.0))
