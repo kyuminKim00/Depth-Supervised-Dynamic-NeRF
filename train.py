@@ -444,11 +444,15 @@ def reconstruction(args):
 
 
         if args.use_depth:
-            ray_idx_depth = trainingSampler_depth.nextids(gamma=gamma_current)
-            rays_train_depth = allrays_depth[ray_idx_depth].to(device).float()
-            depth_train = all_depth[ray_idx_depth].to(device).float()
+            #ray_idx_depth = trainingSampler_depth.nextids(gamma=gamma_current)
+            #rays_train_depth = allrays_depth[ray_idx_depth].to(device).float()
+            #depth_train = all_depth[ray_idx_depth].to(device).float()
+            #temporal_indices_depth, supervision_depth_train = temporal_sampler_depth.sample(depth_train, iteration)
 
-            temporal_indices_depth, supervision_depth_train = temporal_sampler_depth.sample(depth_train, iteration)
+            rays_train_depth = allrays_depth[ray_idx].to(device).float()
+            depth_train = all_depth[ray_idx].to(device).float()
+            temporal_indices_depth, supervision_depth_train = temporal_sampler.sample(depth_train, iteration)
+
             
 
         #rgb_map, alphas_map, depth_map, weights, uncertainty
@@ -475,20 +479,20 @@ def reconstruction(args):
             retva = Namespace(**retva)
             
             
-            if args.use_depth:
-                print(torch.isnan(rays_train_depth).any())
-                print(torch.isnan(depth_train).any())
-                print(torch.isnan(temporal_indices_depth).any())
-                print(torch.isnan(supervision_depth_train).any())
+            # if args.use_depth:
+            #     print(torch.isnan(rays_train_depth).any())
+            #     print(torch.isnan(depth_train).any())
+            #     print(torch.isnan(temporal_indices_depth).any())
+            #     print(torch.isnan(supervision_depth_train).any())
 
 
-                retva_depth = renderer(rays_train_depth, tensorf, chunk=current_batch_size,
-                                        N_samples=nSamples, white_bg = white_bg, ndc_ray=ndc_ray,
-                                        device=device, is_train=True, rgb_train=None,
-                                        temporal_indices=temporal_indices_depth, static_branch_only=True,
-                                        std_train=None, nodepth=False)
-                retva_depth = Namespace(**retva_depth)
-                print(retva_depth.static_depth_map)
+            #     retva_depth = renderer(rays_train_depth, tensorf, chunk=current_batch_size,
+            #                             N_samples=nSamples, white_bg = white_bg, ndc_ray=ndc_ray,
+            #                             device=device, is_train=True, rgb_train=None,
+            #                             temporal_indices=temporal_indices_depth, static_branch_only=True,
+            #                             std_train=None, nodepth=False)
+            #     retva_depth = Namespace(**retva_depth)
+            #     print(retva_depth.static_depth_map)
                 
             # print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=10))
             
@@ -543,7 +547,7 @@ def reconstruction(args):
                                 index += 1
                                 continue 
                             else:
-                                depth_loss += torch.mean((retva_depth.static_depth_map[index] - i)**2)
+                                depth_loss += torch.mean((retva.static_depth_map[index] - i)**2)
                                 index += 1
 
                         total_depth_loss += depth_loss 

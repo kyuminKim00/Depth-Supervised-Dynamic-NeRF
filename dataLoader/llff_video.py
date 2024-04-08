@@ -301,13 +301,14 @@ class LLFFVideoDataset(Dataset): #torch.utils.data의 Dataset 클래스를 상�
         
         if use_depth:
             print("read_depth start")
-            self.read_depth()
+            self.read_depthmap()
             print("read_depth done")
 
         self.white_bg = False
 
         # self.near_far = [np.min(self.near_fars[:,0]),np.max(self.near_fars[:,1])]
         self.near_far = [near, far]
+        
         # self.scene_bbox = torch.tensor([[-1.5, -1.67, -1.0], [1.5, 1.67, 1.0]])
         # TODO
         # self.scene_bbox = torch.tensor([[-2.0, -2.0, -1.0], [2.0, 2.0, 1.0]])
@@ -319,6 +320,7 @@ class LLFFVideoDataset(Dataset): #torch.utils.data의 Dataset 클래스를 상�
         # self.scene_bbox = torch.tensor([-1.67, -1.5, -1.0], [1.67, 1.5, 1.0]])
         self.center = torch.mean(self.scene_bbox, dim=0).float().view(1, 1, 3)
         self.invradius = 1.0 / (self.scene_bbox[1] - self.center).float().view(1, 1, 3)
+        self.z_diff = self.scene_bbox[1, 2] - self.scene_bbox[0, 2]
 
     def read_meta(self):
 
@@ -483,10 +485,8 @@ class LLFFVideoDataset(Dataset): #torch.utils.data의 Dataset 클래스를 상�
                 self.all_stds_without_diffusion = torch.stack(self.all_stds_without_diffusion, 0).reshape(-1,*self.img_wh[::-1])
 
 
-    def read_depth(self):
+    def read_depth_colmap(self):
         depth_gts, far = load_colmap_depth(self.root_dir, factor=int(self.downsample), bd_factor=.75)
-        print("load_colmap_depth OK")
-
         W, H = self.img_wh
 
         self.all_rays_depth = []
@@ -505,30 +505,59 @@ class LLFFVideoDataset(Dataset): #torch.utils.data의 Dataset 클래스를 상�
                 depth_gt = np.array(depth_gt) / 21.5
                 depth_gt = torch.from_numpy(depth_gt).reshape(-1)
                 self.all_depth += [depth_gt.half()]
-
-                # rays_o_col, rays_d_col = get_rays_by_coord_np(H, W, self.focal[0], c2w, depth_gts[i]['coord'])
-                # rays_o_col = torch.tensor(rays_o_col)
-                # rays_d_col = torch.tensor(rays_d_col)
-                # rays_o_col, rays_d_col = ndc_rays_blender(H, W, self.focal[0], 1.0, rays_o_col, rays_d_col)
-                #rays_o_col = rays_o_col.float()
-                #rays_d_col = rays_d_col.float()
-
-                # depth_value = depth_gts[i]['depth'][:,None,None]
-                # weights = depth_gts[i]['error'][:,None,None]
-                # depth_value = torch.tensor(depth_value)
-                # depth_value = depth_value.squeeze(-1)
-                # depth_value = depth_value / 21.5
-                # weights = torch.tensor(weights)
-                # weights = weights.squeeze(-1)
-                # rays_depth = torch.cat([rays_o_col, rays_d_col], 1).half()
-                # rays_depth = torch.cat([rays_depth, depth_value, weights], axis=1)
-                # self.all_rays_depth += [rays_depth]
         
         self.all_rays_depth = torch.cat(self.all_rays_depth, 0) #(H*W, 3)
         self.all_depth = torch.cat(self.all_depth, 0) #(H*W, 1)
         self.all_depth =  self.all_depth.unsqueeze(-1)
         self.all_depth =  self.all_depth.unsqueeze(-1)
         self.all_depth =  self.all_depth.repeat(1, self.n_frames, 1) #(H*W, frames, 1)
+        print("read colmap_depth DONE")
+
+
+    def read_depthmap(self):
+        W, H = self.img_wh
+        self.all_rays_depth = []
+        self.all_depth = []
+        self.depth_paths = sorted(glob.glob(os.path.join(self.root_dir, 'depthmap_{}/*'.format(int(self.downsample)))))
+        depth_list = i_test if self.split != 'train' else list(set(np.arange(len(self.poses))) - set(i_test))
+
+         for i in depth_list:
+            depth_path = self.depth_paths[i]
+            print(depth_path)
+
+            c2w = torch.FloatTensor(self.poses[i])
+            frames_paths = sorted(os.listdir(depth_path))[self.frame_start:self.frame_start+self.n_frames][::(self.n_frames//self.n_frames)]
+        
+            assert os.path.isdir(depth_path)
+            frames = [Image.open(os.path.join(depth_path, image_id)).convert('L') for image_id in frames_paths]
+            if self.downsample != 1.0:
+                if list(frames[0].size) != list(self.img_wh):
+                    frames = [img.resize(self.img_wh, Image.LANCZOS) for img in frames]
+            frames = [self.transform(img) for img in frames]  # (T, 3, h, w)
+            frames = [img.view(3, -1).permute(1, 0) for img in frames]  # (T, h*w, 3) RGB
+            frames = torch.stack(frames, dim=1) # hw T 3
+            frames = (self.z_diff/2) *((255 - frames) / 255) #depth 스케일 맞추기
+            self.all_depth += [frames.half()]
+
+            rays_o_depth, rays_d_depth = get_rays(self.directions, c2w)# both (h*w, 3)
+            rays_o_depth, rays_d_depth = ndc_rays_blender(H, W, self.focal[0], 1.0, rays_o_depth, rays_d_depth)
+            viewdir = rays_d_depth / torch.norm(rays_d_depth, dim=-1, keepdim=True)
+            self.all_rays_depth += [torch.cat([rays_o_depth, rays_d_depth], 1).half()]  # (h*w, 6)
+
+        if not self.is_stack:
+            
+            self.all_rays_depth = torch.cat(self.all_rays_depth, 0) # (len(self.meta['frames])*h*w, 3)
+            self.all_depth = torch.cat(self.all_depth, 0) # (len(self.meta['frames])*h*w, T, 3)
+
+            print("all_rays_depth: " + str(self.all_rays_depth.shape))
+            print("all_depth: " + str(self.all_depth.shape))
+           
+        else:
+            print("is stack true")
+            self.all_rays_depth = torch.stack(self.all_rays_depth, 0)   # (len(self.meta['frames]),h,w, 3)
+            T = self.all_depth[0].shape[1]
+            self.all_depth = torch.stack(self.all_depth, 0).reshape(-1,*self.img_wh[::-1], T, 3)  # (len(self.meta['frames]),h,w, T, 3)
+
 
     def shift_stds(self):
         self.all_stds = self.all_stds_without_diffusion
