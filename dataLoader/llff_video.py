@@ -295,6 +295,8 @@ class LLFFVideoDataset(Dataset): #torch.utils.data의 Dataset 클래스를 상�
         self.blender2opencv = np.eye(4)#np.array([[1, 0, 0, 0], [0, -1, 0, 0], [0, 0, -1, 0], [0, 0, 0, 1]])
         self.n_frames = n_frames
         self.frame_start = frame_start
+        self.scene_bbox = torch.tensor([scene_box, list(map(lambda x: -x, scene_box))])
+
         print("read_meta start")
         self.read_meta()
         print("read_meta done")
@@ -315,13 +317,12 @@ class LLFFVideoDataset(Dataset): #torch.utils.data의 Dataset 클래스를 상�
         # self.scene_bbox = torch.tensor([[-1.5, -3.0, -1.0], [1.5, 3.0, 1.0]])
         if scene_box is None:
             scene_box = [-3.0, -1.67, -1.2]
-        self.scene_bbox = torch.tensor([scene_box, list(map(lambda x: -x, scene_box))])
+        
         # self.scene_bbox = torch.tensor([[-4.0, -3.0, -2.0], [4.0, 3.0, 2.0]])
         # self.scene_bbox = torch.tensor([-1.67, -1.5, -1.0], [1.67, 1.5, 1.0]])
         self.center = torch.mean(self.scene_bbox, dim=0).float().view(1, 1, 3)
         self.invradius = 1.0 / (self.scene_bbox[1] - self.center).float().view(1, 1, 3)
-        self.z_diff = self.scene_bbox[1, 2] - self.scene_bbox[0, 2]
-
+        
     def read_meta(self):
 
         poses_bounds = np.load(os.path.join(self.root_dir, 'poses_bounds.npy'))  # (N_images, 17)
@@ -519,9 +520,10 @@ class LLFFVideoDataset(Dataset): #torch.utils.data의 Dataset 클래스를 상�
         self.all_rays_depth = []
         self.all_depth = []
         self.depth_paths = sorted(glob.glob(os.path.join(self.root_dir, 'depthmap_{}/*'.format(int(self.downsample)))))
+        i_test = np.array(self.hold_id)
         depth_list = i_test if self.split != 'train' else list(set(np.arange(len(self.poses))) - set(i_test))
 
-         for i in depth_list:
+        for i in depth_list:
             depth_path = self.depth_paths[i]
             print(depth_path)
 
@@ -533,10 +535,10 @@ class LLFFVideoDataset(Dataset): #torch.utils.data의 Dataset 클래스를 상�
             if self.downsample != 1.0:
                 if list(frames[0].size) != list(self.img_wh):
                     frames = [img.resize(self.img_wh, Image.LANCZOS) for img in frames]
-            frames = [self.transform(img) for img in frames]  # (T, 3, h, w)
-            frames = [img.view(3, -1).permute(1, 0) for img in frames]  # (T, h*w, 3) RGB
-            frames = torch.stack(frames, dim=1) # hw T 3
-            frames = (self.z_diff/2) *((255 - frames) / 255) #depth 스케일 맞추기
+            frames = [self.transform(img) for img in frames]  # (T, 1, h, w)
+            frames = [img.view(-1, 1) for img in frames] # (T, h*w, 1)
+            frames = torch.stack(frames, dim=1) # hw T 1
+            frames = ((self.scene_bbox[1, 2] - self.scene_bbox[0, 2])/2) *((255 - frames) / 255) #depth 스케일 맞추기
             self.all_depth += [frames.half()]
 
             rays_o_depth, rays_d_depth = get_rays(self.directions, c2w)# both (h*w, 3)
@@ -547,7 +549,7 @@ class LLFFVideoDataset(Dataset): #torch.utils.data의 Dataset 클래스를 상�
         if not self.is_stack:
             
             self.all_rays_depth = torch.cat(self.all_rays_depth, 0) # (len(self.meta['frames])*h*w, 3)
-            self.all_depth = torch.cat(self.all_depth, 0) # (len(self.meta['frames])*h*w, T, 3)
+            self.all_depth = torch.cat(self.all_depth, 0) # (len(self.meta['frames])*h*w, T, 1)
 
             print("all_rays_depth: " + str(self.all_rays_depth.shape))
             print("all_depth: " + str(self.all_depth.shape))
@@ -557,6 +559,7 @@ class LLFFVideoDataset(Dataset): #torch.utils.data의 Dataset 클래스를 상�
             self.all_rays_depth = torch.stack(self.all_rays_depth, 0)   # (len(self.meta['frames]),h,w, 3)
             T = self.all_depth[0].shape[1]
             self.all_depth = torch.stack(self.all_depth, 0).reshape(-1,*self.img_wh[::-1], T, 3)  # (len(self.meta['frames]),h,w, T, 3)
+        print("all_depth : ", self.all_depth)
 
 
     def shift_stds(self):

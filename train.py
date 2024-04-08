@@ -548,6 +548,8 @@ def reconstruction(args):
                                 continue 
                             else:
                                 depth_loss += torch.mean((retva.static_depth_map[index] - i)**2)
+                                print("depth gt : ", i)
+                                print("depth map: ", retva.static_depth_map[index])
                                 index += 1
 
                         total_depth_loss += depth_loss 
@@ -556,7 +558,7 @@ def reconstruction(args):
                     # loss = ((retva.rgb_map - rgb_train[retva.ray_wise_temporal_mask])**2).mean()
 
 
-                    depth_lambda = 10000 #depth loss 가중치, 하이퍼파라미터
+                    depth_lambda = 0.1 #depth loss 가중치, 하이퍼파라미터
                     if args.use_depth:
                         total_loss += (loss + depth_lambda * total_depth_loss)
                     else:
