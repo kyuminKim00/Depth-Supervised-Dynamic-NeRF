@@ -17,7 +17,7 @@ use_depth = 1
 dataset_name = llffvideo
 datadir = /data2/kkm/km/data/flame_steak_5/
 expname =  tensorf_flower_VM_coffe_small3_static_dynamic12
-basedir = ../log/yy
+basedir = ../log/x
 
 downsample_train = 4.0
 ndc_ray = 1

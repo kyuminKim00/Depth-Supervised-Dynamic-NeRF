@@ -535,10 +535,12 @@ class LLFFVideoDataset(Dataset): #torch.utils.data의 Dataset 클래스를 상�
             if self.downsample != 1.0:
                 if list(frames[0].size) != list(self.img_wh):
                     frames = [img.resize(self.img_wh, Image.LANCZOS) for img in frames]
-            frames = [self.transform(img) for img in frames]  # (T, 1, h, w)
+            frames = [self.transform(img) for img in frames]  # (T, 1, h, w) self.transform(img) 하면 0~1값으로 변경
             frames = [img.view(-1, 1) for img in frames] # (T, h*w, 1)
             frames = torch.stack(frames, dim=1) # hw T 1
-            frames = ((self.scene_bbox[1, 2] - self.scene_bbox[0, 2])/2) *((255 - frames) / 255) #depth 스케일 맞추기
+            #frames = ((self.scene_bbox[1, 2] - self.scene_bbox[0, 2])/2) * ((255 - frames) / 255) #depth 스케일 맞추기
+            frames = (((3)/2) * (1 - frames)) #depth 스케일 맞추기
+
             self.all_depth += [frames.half()]
 
             rays_o_depth, rays_d_depth = get_rays(self.directions, c2w)# both (h*w, 3)
@@ -560,6 +562,7 @@ class LLFFVideoDataset(Dataset): #torch.utils.data의 Dataset 클래스를 상�
             T = self.all_depth[0].shape[1]
             self.all_depth = torch.stack(self.all_depth, 0).reshape(-1,*self.img_wh[::-1], T, 3)  # (len(self.meta['frames]),h,w, T, 3)
         print("all_depth : ", self.all_depth)
+        np.save("all_depth.npy", self.all_depth)
 
 
     def shift_stds(self):

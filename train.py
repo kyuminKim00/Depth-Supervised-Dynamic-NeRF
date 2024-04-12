@@ -334,6 +334,9 @@ def reconstruction(args):
     static_optimizer = opt_proto(static_grad_vars)
     scaler = GradScaler()
     static_scaler = GradScaler()
+    if args.use_depth:
+        depth_optimizer = opt_proto(static_grad_vars)
+        depth_scaler = GradScaler()
 
     #linear in logrithmic space
     N_voxel_list = ( torch.round(
@@ -384,7 +387,8 @@ def reconstruction(args):
         print("=================SimpleRay========================") #동적인 영역 학습?
         print('All Rays: {}'.format(allrays.shape[0]))
         trainingSampler = SimpleSampler(allrays.shape[0], current_batch_size)
-        trainingSampler_depth = SimpleSampler(allrays_depth.shape[0], current_batch_size)
+        if args.use_depth:
+            trainingSampler_depth = SimpleSampler(allrays_depth.shape[0], current_batch_size)
 
     elif args.ray_sampler == 'weighted':
         trainingSampler = WeightedRaySampler(allrays.shape[0], current_batch_size, train_dataset.all_rays_weight)
@@ -461,6 +465,8 @@ def reconstruction(args):
 
         optimizer.zero_grad()
         static_optimizer.zero_grad()
+        if args.use_depth:
+            depth_optimizer.zero_grad()
         with autocast(enabled=bool(args.amp)):
 
             ###########CORE OPTIMIZATION LOOP!################
@@ -479,22 +485,22 @@ def reconstruction(args):
             retva = Namespace(**retva)
             
             
-            # if args.use_depth:
-            #     print(torch.isnan(rays_train_depth).any())
-            #     print(torch.isnan(depth_train).any())
-            #     print(torch.isnan(temporal_indices_depth).any())
-            #     print(torch.isnan(supervision_depth_train).any())
+            if args.use_depth:
+                # print(torch.isnan(rays_train_depth).any())
+                # print(torch.isnan(depth_train).any())
+                # print(torch.isnan(temporal_indices_depth).any())
+                # print(torch.isnan(supervision_depth_train).any())
 
 
-            #     retva_depth = renderer(rays_train_depth, tensorf, chunk=current_batch_size,
-            #                             N_samples=nSamples, white_bg = white_bg, ndc_ray=ndc_ray,
-            #                             device=device, is_train=True, rgb_train=None,
-            #                             temporal_indices=temporal_indices_depth, static_branch_only=True,
-            #                             std_train=None, nodepth=False)
-            #     retva_depth = Namespace(**retva_depth)
-            #     print(retva_depth.static_depth_map)
+                retva_depth = renderer(rays_train_depth, tensorf, chunk=current_batch_size,
+                                        N_samples=nSamples, white_bg = white_bg, ndc_ray=ndc_ray,
+                                        device=device, is_train=True, rgb_train=None,
+                                        temporal_indices=temporal_indices_depth, static_branch_only=True,
+                                        std_train=None, nodepth=False)
+                retva_depth = Namespace(**retva_depth)
+                # print(retva_depth.static_depth_map)
                 
-            # print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=10))
+            ## print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=10))
             
 
             
@@ -539,30 +545,35 @@ def reconstruction(args):
                                          .unsqueeze(dim=1).expand(-1, args.n_train_frames)[retva.ray_wise_temporal_mask].reshape(-1)
 
                     loss = (loss_ray_wise * loss_ray_weight).sum()/loss_ray_weight.sum()
-                    if args.use_depth:
-                        depth_loss = 0
-                        index = 0
-                        for i in supervision_depth_train[:, 0, :]:
-                            if i == 0:
-                                index += 1
-                                continue 
-                            else:
-                                depth_loss += torch.mean((retva.static_depth_map[index] - i)**2)
-                                print("depth gt : ", i)
-                                print("depth map: ", retva.static_depth_map[index])
-                                index += 1
+                    # if args.use_depth:
+                    #     depth_loss = 0
+                    #     index = 0
+                    #     for i in supervision_depth_train[:, 0, :]:
+                    #         if i == 0:
+                    #             index += 1
+                    #             continue 
+                    #         else:
+                    #             depth_loss += torch.mean((retva.static_depth_map[index] - i)**2)
+                    #             #print("depth gt : ", i)
+                    #             #print("depth map: ", retva.static_depth_map[index])
+                    #             index += 1
 
-                        total_depth_loss += depth_loss 
+                    #     total_depth_loss += depth_loss 
+                    
                     # hard_fraction = loss_mask.sum()/(loss_mask.shape[0])
                     Metrics['hfrac'].append(1.0)
                     # loss = ((retva.rgb_map - rgb_train[retva.ray_wise_temporal_mask])**2).mean()
 
 
+                   # depth_lambda = 0.00001 #depth loss 가중치, 하이퍼파라미터
                     depth_lambda = 0.1 #depth loss 가중치, 하이퍼파라미터
-                    if args.use_depth:
-                        total_loss += (loss + depth_lambda * total_depth_loss)
-                    else:
-                        total_loss += loss
+
+                    # if args.use_depth:
+                    #     print("depth loss: ", depth_lambda * total_depth_loss)
+                    #     print("rgb loss: ", loss)
+                    #     total_loss += (loss + depth_lambda * total_depth_loss)
+                    # else:
+                    total_loss += loss
                     
 
                     Metrics['PSNRs'].append(-10.0 * np.log(loss.item()) / np.log(10.0))
@@ -582,11 +593,49 @@ def reconstruction(args):
                     raise NotImplementedError
                 if args.static_loss == 'l2':
                     loss_static = ((retva.static_rgb_map - static_supervision)**2).mean()
+                    if args.use_depth:
+                        depth_loss = 0
+                        #depth_loss = torch.mean((retva.static_depth_map - supervision_depth_train)**2)
+                        depth_loss = torch.mean((retva_depth.static_depth_map - supervision_depth_train)**2)
+                        # index = 0
+                        # for i in supervision_depth_train[:, 0, :]:
+                        #     if i == 0:
+                        #         index += 1
+                        #         continue 
+                        #     else:
+                        #         depth_loss += torch.mean((retva.static_depth_map[index] - i)**2)
+                        #         #print("depth gt : ", i)
+                        #         #print("depth map: ", retva.static_depth_map[index])
+                        #         index += 1
+
+                        total_depth_loss += depth_lambda * depth_loss 
+
                 elif args.static_loss == 'l1':
                     loss_static = ((retva.static_rgb_map - static_supervision).abs()).mean()
+                    
+                    if args.use_depth:
+                        depth_loss = 0
+                        #depth_loss = torch.mean((retva.static_depth_map - supervision_depth_train).abgs())
+                        depth_loss = torch.mean((retva_depth.static_depth_map - supervision_depth_train).abgs())
+
+                        # index = 0
+                        # for i in supervision_depth_train[:, 0, :]:
+                        #     if i == 0:
+                        #         index += 1
+                        #         continue 
+                        #     else:
+                        #         depth_loss += torch.mean((retva.static_depth_map[index] - i)**2)
+                        #         #print("depth gt : ", i)
+                        #         #print("depth map: ", retva.static_depth_map[index])
+                        #         index += 1
+
+                        total_depth_loss += depth_lambda * depth_loss 
+
                 else:
                     raise NotImplementedError
+                # total_static_loss += loss_static + depth_lambda * total_depth_loss
                 total_static_loss += loss_static
+
                 Metrics['PSNRs_STA'].append(-10.0 * np.log(loss_static.item()) / np.log(10.0))
                 Metrics['sfrac'].append(retva.static_fraction)
             else:
@@ -675,20 +724,39 @@ def reconstruction(args):
 
         if args.amp:
             static_scaler.scale(total_static_loss).backward()
+            print("total_static_loss", total_static_loss)
             static_scaler.step(static_optimizer)
             static_scaler.update()
+            
+            if args.use_depth:
+                total_depth_loss.requires_grad = True
+                depth_scaler.scale(total_depth_loss).backward()
+                print("total_depth_loss", total_depth_loss)
+                depth_scaler.step(depth_optimizer)
+                depth_scaler.update()
 
             if not args.static_branch_only:
                 scaler.scale(total_loss).backward()
+                print("total_loss", total_loss)
                 scaler.step(optimizer)
                 scaler.update()
             # debugger.check()
         else:
             total_static_loss.backward()
+            print("total_static_loss", total_static_loss)
+
             static_optimizer.step()
+
+            if args.use_depth:
+                total_depth_loss.requires_grad = True
+                total_depth_loss.backward()
+                print("total_depth_loss", total_depth_loss)
+                depth_optimizer.step()
 
             if not args.static_branch_only:
                 total_loss.backward()
+                print("total_loss", total_loss)
+
                 optimizer.step()
 
         _time = time.time()
