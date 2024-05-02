@@ -274,7 +274,7 @@ class LLFFVideoDataset(Dataset): #torch.utils.data의 Dataset 클래스를 상�
                                  #불러 올 수 있다.
     def __init__(self, datadir, split='train', downsample=4.0, is_stack=False, hold_id=[0,], n_frames=100,
                  render_views=120, tmp_path='memory', scene_box=[-3.0, -1.67, -1.2], temporal_variance_threshold=1000,
-                 frame_start=0, near=0.0, far=1.0, diffuse_kernel=0, use_depth=0):
+                 frame_start=0, near=0.0, far=1.0, diffuse_kernel=0, use_depth=0, use_colmap_depth=0):
         """
         spheric_poses: whether the images are taken in a spheric inward-facing manner
                        default: False (forward-facing)
@@ -287,6 +287,7 @@ class LLFFVideoDataset(Dataset): #torch.utils.data의 Dataset 클래스를 상�
 
         self.downsample = downsample
         self.use_depth = use_depth
+        self.use_colmap_depth = use_colmap_depth
         self.diffuse_kernel = diffuse_kernel
         self.define_transforms()
         self.render_views = render_views
@@ -301,10 +302,11 @@ class LLFFVideoDataset(Dataset): #torch.utils.data의 Dataset 클래스를 상�
         self.read_meta()
         print("read_meta done")
         
-        if use_depth:
-            print("read_depth start")
+        if self.use_depth and self.use_colmap_depth: 
+            self.read_depth_colmap()
+
+        elif self.use_depth and (self.use_colmap_depth==0):
             self.read_depthmap()
-            print("read_depth done")
 
         self.white_bg = False
 
@@ -503,7 +505,7 @@ class LLFFVideoDataset(Dataset): #torch.utils.data의 Dataset 클래스를 상�
                 rays_o_col, rays_d_col = ndc_rays_blender(H, W, self.focal[0], 1.0, rays_o_col, rays_d_col)
                 self.all_rays_depth += [torch.cat([rays_o_col, rays_d_col], 1).half()] #(H*W, 6)
 
-                depth_gt = np.array(depth_gt) / 21.5
+                depth_gt = np.array(depth_gt)
                 depth_gt = torch.from_numpy(depth_gt).reshape(-1)
                 self.all_depth += [depth_gt.half()]
         
