@@ -15,10 +15,14 @@ def config_parser(cmd=None):
                     help='depth weight')
     parser.add_argument('--cam_num', type=int, default=0,
                     help='rendering cam position number')
-    parser.add_argument('--margin', type=float, default=0.3,
-                    help='margin when using static depth map')
+    parser.add_argument('--cam_num_list', nargs='+', type=int,
+                    help='rendering cams position number')
     parser.add_argument("--expname", type=str,
                         help='experiment name')
+    parser.add_argument('--margin', type=float, default=0.3,
+                    help='margin when using static depth map')
+    parser.add_argument("--depthmap_npy_path", type=str, default = '',
+                        help='depthmap path')
     parser.add_argument("--basedir", type=str, default='../log',
                         help='where to store ckpts and logs')
     parser.add_argument("--add_timestamp", type=int, default=0,

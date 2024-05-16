@@ -16,7 +16,6 @@ depth_lambda = 1.0
 margin = 0.2
 use_depth = 0
 use_colmap_depth = 0
-
 dataset_name = llffvideo
 datadir = ../data/flame_steak_static_only_new/
 expname =  tensorf_flower_VM_coffe_small3_static_dynamic12

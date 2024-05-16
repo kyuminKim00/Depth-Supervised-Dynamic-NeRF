@@ -1,6 +1,38 @@
-# MixvVoxels With DEPTH #
+# MixvVoxels With DEPTH #  
+Distill static model depth to Dynamic model 
 
 ## 실행 방법 ##
+### Static model 만들기 ###
+1. 하나의 카메라로 장면 이미지 얻기(카메라 위치 당 이미지 1장)  
+
+2. static data dir 구성
+data  
+|frames  
+    |cam00|cam00.png 
+    |cam01|cam01.png  
+    |cam02|cam02.png ... 
+
+3. python prepare_static.py --static_data_path [data_path] --frame_num [n_frames]  
+
+4. static config file 만들기  
+
+5. static model 학습  
+  python train --config [static_config_path] --render_path 0
+
+5. 학습한 static model로 depth 추출  
+  python static_model2depth.py --config [static_config_path] --ckpt [static_model_ckpt_path] --cam_num_list [cam1 cam2 ...]
+
+
+### Dynamic model 학습 ###
+6. dynamic config file 만들기  
+  depthmap_npy_path 에 5번에서 생성한 all_depth.npy 경로 설정
+
+7. dynamic model 학습  
+  python train.py --config [dynamic_config_path] --render_path 0
+
+---  
+
+### COLMAP depth 사용(DS-NeRF) ###
 1. data/your_datadir/video 에 동영상 넣기(cam0, cam1, cam2 ,...)  
 데이터중에 cam0는 testset, 나머지는 trainset, cam0 depth, rgb는 훈련에서 사용하지 않음
 

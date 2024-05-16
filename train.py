@@ -229,7 +229,8 @@ def reconstruction(args):
     time_dataset_start = time.time()
     train_dataset = dataset(args.datadir, split='train', downsample=args.downsample_train, is_stack=False,
                             n_frames=args.n_frames, scene_box=args.scene_box, temporal_variance_threshold=args.temporal_variance_threshold,
-                            frame_start=args.frame_start, near=args.near, far=args.far, diffuse_kernel=args.diffuse_kernel, use_depth = args.use_depth, use_colmap_depth = args.use_colmap_depth)
+                            frame_start=args.frame_start, near=args.near, far=args.far, diffuse_kernel=args.diffuse_kernel,
+                            use_depth = args.use_depth, use_colmap_depth = args.use_colmap_depth, depthmap_path = args.depthmap_npy_path)
     time_dataset_end = time.time()
     print(f'Loading Train Dataset: {time_dataset_end-time_dataset_start}s')
     time_dataset_start = time_dataset_end

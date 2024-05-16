@@ -274,7 +274,7 @@ class LLFFVideoDataset(Dataset): #torch.utils.data의 Dataset 클래스를 상�
                                  #불러 올 수 있다.
     def __init__(self, datadir, split='train', downsample=4.0, is_stack=False, hold_id=[0,], n_frames=100,
                  render_views=120, tmp_path='memory', scene_box=[-3.0, -1.67, -1.2], temporal_variance_threshold=1000,
-                 frame_start=0, near=0.0, far=1.0, diffuse_kernel=0, use_depth=0, use_colmap_depth=0):
+                 frame_start=0, near=0.0, far=1.0, diffuse_kernel=0, use_depth=0, use_colmap_depth=0, depthmap_path = " "):
         """
         spheric_poses: whether the images are taken in a spheric inward-facing manner
                        default: False (forward-facing)
@@ -297,7 +297,7 @@ class LLFFVideoDataset(Dataset): #torch.utils.data의 Dataset 클래스를 상�
         self.n_frames = n_frames
         self.frame_start = frame_start
         self.scene_bbox = torch.tensor([scene_box, list(map(lambda x: -x, scene_box))])
-
+        
         
         self.read_meta()
         
@@ -305,6 +305,7 @@ class LLFFVideoDataset(Dataset): #torch.utils.data의 Dataset 클래스를 상�
             self.read_depth_colmap()
 
         elif self.use_depth and (self.use_colmap_depth==0):
+            self.depthmap = depthmap_path
             self.read_depthmap()
 
         self.white_bg = False
@@ -574,11 +575,9 @@ class LLFFVideoDataset(Dataset): #torch.utils.data의 Dataset 클래스를 상�
             T = self.all_depth[0].shape[1]
             self.all_depth = torch.stack(self.all_depth, 0).reshape(-1,*self.img_wh[::-1], T, 3)  # (len(self.meta['frames]),h,w, T, 3)
         
-
-        all_depth = np.load("/data2/kkm/km/mixvoxels_depth/all_depth_25000.npy")
-        
+        print("depthmap path :", self.depthmap)
+        all_depth = np.load(self.depthmap)
         all_depth = torch.tensor(all_depth)
-        
         self.all_depth = all_depth
         print("all_depth.shape : ", self.all_depth.shape)
         print("read_depthmap DONE")
