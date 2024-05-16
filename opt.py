@@ -11,6 +11,12 @@ def config_parser(cmd=None):
                     help='use depth in train step')
     parser.add_argument('--use_colmap_depth', type=int, default=0,
                     help='depth = COLMAP depth')
+    parser.add_argument('--depth_lambda', type=float, default=0.1,
+                    help='depth weight')
+    parser.add_argument('--cam_num', type=int, default=0,
+                    help='rendering cam position number')
+    parser.add_argument('--margin', type=float, default=0.3,
+                    help='margin when using static depth map')
     parser.add_argument("--expname", type=str,
                         help='experiment name')
     parser.add_argument("--basedir", type=str, default='../log',

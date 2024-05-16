@@ -298,9 +298,8 @@ class LLFFVideoDataset(Dataset): #torch.utils.data의 Dataset 클래스를 상�
         self.frame_start = frame_start
         self.scene_bbox = torch.tensor([scene_box, list(map(lambda x: -x, scene_box))])
 
-        print("read_meta start")
+        
         self.read_meta()
-        print("read_meta done")
         
         if self.use_depth and self.use_colmap_depth: 
             self.read_depth_colmap()
@@ -312,6 +311,7 @@ class LLFFVideoDataset(Dataset): #torch.utils.data의 Dataset 클래스를 상�
 
         # self.near_far = [np.min(self.near_fars[:,0]),np.max(self.near_fars[:,1])]
         self.near_far = [near, far]
+        print("near_far", self.near_far)
         
         # self.scene_bbox = torch.tensor([[-1.5, -1.67, -1.0], [1.5, 1.67, 1.0]])
         # TODO
@@ -326,7 +326,7 @@ class LLFFVideoDataset(Dataset): #torch.utils.data의 Dataset 클래스를 상�
         self.invradius = 1.0 / (self.scene_bbox[1] - self.center).float().view(1, 1, 3)
         
     def read_meta(self):
-
+        print("read_meta start")
         poses_bounds = np.load(os.path.join(self.root_dir, 'poses_bounds.npy'))  # (N_images, 17)
         #poses_bounds = np.load("/data2/kkm/km/mixvoxels/data/flame_steak/poses_bounds.npy")  # (4, 17)
         #[rx1, ry1, rz1, tx, H, rx2, ry2, rz2, ty, W, rx3, ry3, rz3, tz, focal_length, bds_min, bds_max]
@@ -379,6 +379,7 @@ class LLFFVideoDataset(Dataset): #torch.utils.data의 Dataset 클래스를 상�
         # the nearest depth is at 1/0.75=1.33
         self.near_fars /= scale_factor #bds_min, bds_max는 정규화 되는게 아니라 scale_factor에 따라서 스케일이 정해짐
         self.poses[..., 3] /= scale_factor 
+        print("self.near_fars", self.near_fars)
 
         # build rendering path
         N_views, N_rots = self.render_views, 2
@@ -486,9 +487,11 @@ class LLFFVideoDataset(Dataset): #torch.utils.data의 Dataset 클래스를 상�
             self.all_stds = torch.stack(self.all_stds, 0).reshape(-1,*self.img_wh[::-1])
             if len(self.all_stds_without_diffusion) > 0:
                 self.all_stds_without_diffusion = torch.stack(self.all_stds_without_diffusion, 0).reshape(-1,*self.img_wh[::-1])
-
+        
+        print("read_meta done")
 
     def read_depth_colmap(self):
+        print("read_depth start")
         depth_gts, far = load_colmap_depth(self.root_dir, factor=int(self.downsample), bd_factor=.75)
         W, H = self.img_wh
 
@@ -518,6 +521,8 @@ class LLFFVideoDataset(Dataset): #torch.utils.data의 Dataset 클래스를 상�
 
 
     def read_depthmap(self):
+        print("read_depthmap start")
+
         W, H = self.img_wh
         self.all_rays_depth = []
         self.all_depth = []
@@ -540,8 +545,12 @@ class LLFFVideoDataset(Dataset): #torch.utils.data의 Dataset 클래스를 상�
             frames = [self.transform(img) for img in frames]  # (T, 1, h, w) self.transform(img) 하면 0~1값으로 변경
             frames = [img.view(-1, 1) for img in frames] # (T, h*w, 1)
             frames = torch.stack(frames, dim=1) # hw T 1
-            #frames = ((self.scene_bbox[1, 2] - self.scene_bbox[0, 2])/2) * ((255 - frames) / 255) #depth 스케일 맞추기
-            frames = (((3)/2) * (1 - frames)) #depth 스케일 맞추기
+            frames = (1 - frames) #가까운게 0, 가장 먼게 1
+
+            min_val = frames.min()
+            max_val = frames.max()
+            frames = (frames - min_val) / (max_val - min_val)
+            
 
             self.all_depth += [frames.half()]
 
@@ -549,6 +558,7 @@ class LLFFVideoDataset(Dataset): #torch.utils.data의 Dataset 클래스를 상�
             rays_o_depth, rays_d_depth = ndc_rays_blender(H, W, self.focal[0], 1.0, rays_o_depth, rays_d_depth)
             viewdir = rays_d_depth / torch.norm(rays_d_depth, dim=-1, keepdim=True)
             self.all_rays_depth += [torch.cat([rays_o_depth, rays_d_depth], 1).half()]  # (h*w, 6)
+
 
         if not self.is_stack:
             
@@ -563,8 +573,15 @@ class LLFFVideoDataset(Dataset): #torch.utils.data의 Dataset 클래스를 상�
             self.all_rays_depth = torch.stack(self.all_rays_depth, 0)   # (len(self.meta['frames]),h,w, 3)
             T = self.all_depth[0].shape[1]
             self.all_depth = torch.stack(self.all_depth, 0).reshape(-1,*self.img_wh[::-1], T, 3)  # (len(self.meta['frames]),h,w, T, 3)
-        print("all_depth : ", self.all_depth)
-        np.save("all_depth.npy", self.all_depth)
+        
+
+        all_depth = np.load("/data2/kkm/km/mixvoxels_depth/all_depth_25000.npy")
+        
+        all_depth = torch.tensor(all_depth)
+        
+        self.all_depth = all_depth
+        print("all_depth.shape : ", self.all_depth.shape)
+        print("read_depthmap DONE")
 
 
     def shift_stds(self):

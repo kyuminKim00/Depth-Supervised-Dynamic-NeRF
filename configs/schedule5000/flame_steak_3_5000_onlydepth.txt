@@ -12,18 +12,20 @@ lr_basis = 2e-3
 lr_dynamic_init = 0.03
 lr_dynamic_basis = 2e-3
 
+depth_lambda = 0.01
 use_depth = 1
+use_colmap_depth = 0
 
 dataset_name = llffvideo
-datadir = /data2/kkm/km/data/flame_steak_5/
+datadir = /data2/kkm/km/data/flame_steak_3
 expname =  tensorf_flower_VM_coffe_small3_static_dynamic12
-basedir = ../log/yy
+basedir = ../log/cam3_depth_0.01_changed/
 
 downsample_train = 4.0
 ndc_ray = 1
 
 n_iters = 5000
-batch_size = 216
+batch_size = 54
 batch_factor = [8,8,2,1]
 featureC = 512
 featureD = 512

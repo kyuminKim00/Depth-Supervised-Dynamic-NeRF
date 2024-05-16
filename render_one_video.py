@@ -67,7 +67,7 @@ pose_path =  os.path.join(args.datadir, "poses_bounds.npy")
 #pose_path = "~~" # poses_bounds.npy 위치 직접 지정
 poses_bounds = np.load(pose_path)
 poses, near_fars, H, W, focal, H, W, scale_factor = prepare_pose_etc(poses_bounds, 4)
-c2w = poses[2, :, :] # 0, 1, 2 카메라 번호 명시, 0번째 카메라 위치에서 렌더링 진행, 
+c2w = poses[args.cam_num, :, :] # 0, 1, 2 카메라 번호 명시, 0번째 카메라 위치에서 렌더링 진행, 
 print("poses_bounds OK")
 
 directions = get_ray_directions_blender(H, W, focal)
@@ -88,21 +88,29 @@ with torch.no_grad():
         retva = renderer(rays, tensorf, std_train=None, chunk=args.batch_size*4, N_samples=-1,
                                 ndc_ray=args.ndc_ray, white_bg = False, device=device, with_grad=False,
                                 simplify=True, static_branch_only=False, temporal_indices=temporal_indices,
-                                remove_foreground=False, diff_calc=False, render_path=True, nodepth=True)
+                                remove_foreground=False, diff_calc=False, render_path=True, nodepth=False)
         retva = Namespace(**retva)
-        #print((retva.static_depth_map).shape)
-        #retva.static_depth_map = retva.static_depth_map.cpu().numpy()
-        #np.save('/data2/kkm/km/mixvoxels_depth/cam0_5', retva.static_depth_map)
-        retva.comp_rgb_map = retva.comp_rgb_map.clamp(0.0, 1.0)
         
+        print(retva.__dict__.keys())
+        print("comp_depth_map", retva.comp_depth_map[:, 0])
+        #np.save("depthmap_cam5_all.npy", retva.comp_depth_map.cpu())
+        np.save("depthmap_cam6_all.npy", retva.comp_depth_map.cpu())
+
+        print("comp_depth_map max", torch.max(retva.comp_depth_map))
+        print("comp_depth_map min", torch.min(retva.comp_depth_map))
+        print("comp_depth_map mean", torch.mean(retva.comp_depth_map))
+        print("comp_depth_map median", torch.median(retva.comp_depth_map))
+        print("comp_depth_map.shape", retva.comp_depth_map.shape)
+
+
+    #     retva.comp_rgb_map = retva.comp_rgb_map.clamp(0.0, 1.0)
         
+    #     proc = multiprocessing.Process(target=write_video, args=(retva.comp_rgb_map.cpu(), savePath, 1, (None if nodepth else retva.comp_depth_map.cpu()), 30, 10,
+    #                                                              H, W, args.n_train_frames, near_fars))
+    #     processings.append(proc)
+    #     proc.start()
 
-        proc = multiprocessing.Process(target=write_video, args=(retva.comp_rgb_map.cpu(), savePath, 1, (None if nodepth else retva.comp_depth_map.cpu()), 30, 10,
-                                                                 H, W, args.n_train_frames, near_fars))
-        processings.append(proc)
-        proc.start()
+    #     for proc in processings:
+    #         proc.join()
 
-        for proc in processings:
-            proc.join()
-
-    print("rendering video COMPLETED !")
+    # print("rendering video COMPLETED !")

@@ -36,8 +36,7 @@ data
 
 ---  
 - 하나의 view에서 동영상 렌더링   
-  python render_one_image.py --config configs/schedule5000/flame_steak_5000.txt --ckpt log/flame_steak_5000/flame_steak_5000.th
-
+  python render_one_video.py --config [config file path] --ckpt [checkpoint path] --cam_num [rendering cam number]
 ## Reference 
 1. [ICCV2023 Oral] MixVoxels: Mixed Neural Voxels for Fast Multi-view Video Synthesis   
 [Project Page](https://fengres.github.io/mixvoxels/) 
