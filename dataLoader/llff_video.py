@@ -304,7 +304,7 @@ class LLFFVideoDataset(Dataset): #torch.utils.data의 Dataset 클래스를 상�
         if self.use_depth and self.use_colmap_depth: 
             self.read_depth_colmap()
 
-        elif self.use_depth and (self.use_colmap_depth==0):
+        elif self.use_depth and self.use_colmap_depth==0:
             self.depthmap = depthmap_path
             self.read_depthmap()
 
@@ -523,37 +523,39 @@ class LLFFVideoDataset(Dataset): #torch.utils.data의 Dataset 클래스를 상�
 
     def read_depthmap(self):
         print("read_depthmap start")
-
+        print("depthmap path :", self.depthmap)
+        all_depth = np.load(self.depthmap)
+        all_depth = torch.tensor(all_depth)
+        self.all_depth = all_depth
+        
         W, H = self.img_wh
         self.all_rays_depth = []
-        self.all_depth = []
-        self.depth_paths = sorted(glob.glob(os.path.join(self.root_dir, 'depthmap_{}/*'.format(int(self.downsample)))))
         i_test = np.array(self.hold_id)
         depth_list = i_test if self.split != 'train' else list(set(np.arange(len(self.poses))) - set(i_test))
-
+        print("depth_list :", depth_list)
         for i in depth_list:
-            depth_path = self.depth_paths[i]
-            print(depth_path)
+            # depth_path = self.depth_paths[i]
+            # print(depth_path)
 
             c2w = torch.FloatTensor(self.poses[i])
-            frames_paths = sorted(os.listdir(depth_path))[self.frame_start:self.frame_start+self.n_frames][::(self.n_frames//self.n_frames)]
+            # frames_paths = sorted(os.listdir(depth_path))[self.frame_start:self.frame_start+self.n_frames][::(self.n_frames//self.n_frames)]
         
-            assert os.path.isdir(depth_path)
-            frames = [Image.open(os.path.join(depth_path, image_id)).convert('L') for image_id in frames_paths]
-            if self.downsample != 1.0:
-                if list(frames[0].size) != list(self.img_wh):
-                    frames = [img.resize(self.img_wh, Image.LANCZOS) for img in frames]
-            frames = [self.transform(img) for img in frames]  # (T, 1, h, w) self.transform(img) 하면 0~1값으로 변경
-            frames = [img.view(-1, 1) for img in frames] # (T, h*w, 1)
-            frames = torch.stack(frames, dim=1) # hw T 1
-            frames = (1 - frames) #가까운게 0, 가장 먼게 1
+            # assert os.path.isdir(depth_path)
+            # frames = [Image.open(os.path.join(depth_path, image_id)).convert('L') for image_id in frames_paths]
+            # if self.downsample != 1.0:
+                # if list(frames[0].size) != list(self.img_wh):
+                    # frames = [img.resize(self.img_wh, Image.LANCZOS) for img in frames]
+            # frames = [self.transform(img) for img in frames]  # (T, 1, h, w) self.transform(img) 하면 0~1값으로 변경
+            # frames = [img.view(-1, 1) for img in frames] # (T, h*w, 1)
+            # frames = torch.stack(frames, dim=1) # hw T 1
+            # frames = (1 - frames) #가까운게 0, 가장 먼게 1
 
-            min_val = frames.min()
-            max_val = frames.max()
-            frames = (frames - min_val) / (max_val - min_val)
+            # min_val = frames.min()
+            # max_val = frames.max()
+            # frames = (frames - min_val) / (max_val - min_val)
             
 
-            self.all_depth += [frames.half()]
+            # self.all_depth += [frames.half()]
 
             rays_o_depth, rays_d_depth = get_rays(self.directions, c2w)# both (h*w, 3)
             rays_o_depth, rays_d_depth = ndc_rays_blender(H, W, self.focal[0], 1.0, rays_o_depth, rays_d_depth)
@@ -564,7 +566,7 @@ class LLFFVideoDataset(Dataset): #torch.utils.data의 Dataset 클래스를 상�
         if not self.is_stack:
             
             self.all_rays_depth = torch.cat(self.all_rays_depth, 0) # (len(self.meta['frames])*h*w, 3)
-            self.all_depth = torch.cat(self.all_depth, 0) # (len(self.meta['frames])*h*w, T, 1)
+            # self.all_depth = torch.cat(self.all_depth, 0) # (len(self.meta['frames])*h*w, T, 1)
 
             print("all_rays_depth: " + str(self.all_rays_depth.shape))
             print("all_depth: " + str(self.all_depth.shape))
@@ -572,14 +574,9 @@ class LLFFVideoDataset(Dataset): #torch.utils.data의 Dataset 클래스를 상�
         else:
             print("is stack true")
             self.all_rays_depth = torch.stack(self.all_rays_depth, 0)   # (len(self.meta['frames]),h,w, 3)
-            T = self.all_depth[0].shape[1]
-            self.all_depth = torch.stack(self.all_depth, 0).reshape(-1,*self.img_wh[::-1], T, 3)  # (len(self.meta['frames]),h,w, T, 3)
-        
-        print("depthmap path :", self.depthmap)
-        all_depth = np.load(self.depthmap)
-        all_depth = torch.tensor(all_depth)
-        self.all_depth = all_depth
-        print("all_depth.shape : ", self.all_depth.shape)
+            # T = self.all_depth[0].shape[1]
+            # self.all_depth = torch.stack(self.all_depth, 0).reshape(-1,*self.img_wh[::-1], T, 3)  # (len(self.meta['frames]),h,w, T, 3)
+    
         print("read_depthmap DONE")
 
 

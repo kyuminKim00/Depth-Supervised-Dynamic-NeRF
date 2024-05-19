@@ -1,9 +1,9 @@
 import numpy as np
-from PIL import Image
-import matplotlib.pyplot as plt
 import torch
 import os
 import cv2
+from render_one_video.py import *
+
 
 
 # cam5 = np.load("depthmap_cam5_all.npy")

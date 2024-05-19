@@ -4,6 +4,7 @@ from PIL import Image
 import os
 import shutil
 import argparse
+import cv2
 
 def resize_image(image_path, output_path, scale=None, resolution=None):
     # Open the image
@@ -96,7 +97,7 @@ if __name__=='__main__':
     depth_dir = root_dir +"/depth"
     if not os.path.exists(frames_resize_dir):
         os.makedirs(frames_resize_dir)
-     if not os.path.exists(depth_dir):
+    if not os.path.exists(depth_dir):
             os.makedirs(depth_dir)
     
     destination_template = "/cam{:02}/cam{:02}.png"
@@ -107,6 +108,7 @@ if __name__=='__main__':
     cam_dir_list = os.listdir(frames_dir)
     
     for i in range(len(cam_dir_list)):
+        
         print("cam_dir_list :", cam_dir_list)
         cam_resize_dir = frames_resize_dir + "/cam{:02}"
         cam_resize_dir_path = cam_resize_dir.format(i)

@@ -21,6 +21,7 @@ data
 
 5. 학습한 static model로 depth 추출  
   python static_model2depth.py --config [static_config_path] --ckpt [static_model_ckpt_path] --cam_num_list [cam1 cam2 ...]
+  inference cam 제외(inference cam은 학습에 사용되지 않아서 depth 추출할 필요 없음)
 
 
 ### Dynamic model 학습 ###
