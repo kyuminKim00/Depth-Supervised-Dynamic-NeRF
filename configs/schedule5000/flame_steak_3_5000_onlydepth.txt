@@ -20,7 +20,7 @@ depthmap_npy_path = /data2/kkm/km/data/flame_steak_static_only_new/depth/all_dep
 dataset_name = llffvideo
 datadir = /data2/kkm/km/data/flame_steak_3
 expname =  tensorf_flower_VM_coffe_small3_static_dynamic12
-basedir = ../log/cam3_depth_0.01_changedchanged/
+basedir = /data2/kkm/km/log/cam3_depth_only_depth_0.01
 
 downsample_train = 4.0
 ndc_ray = 1

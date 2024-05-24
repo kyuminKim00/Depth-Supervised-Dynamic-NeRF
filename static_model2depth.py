@@ -3,9 +3,9 @@ from render_one_video import *
 if __name__=='__main__':
     args = config_parser()
     data_dir = args.datadir
-    depth_dir = data_dir +"/depth"
+    depth_dir = data_dir +"/depth/cam11"
     print(depth_dir)
-    # print(args.cam_num_list)
+    print(args.cam_num_list)
 
     # for i in args.cam_num_list:
     #     if i == " ":

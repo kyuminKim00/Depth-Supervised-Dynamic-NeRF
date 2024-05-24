@@ -15,7 +15,7 @@ from argparse import Namespace
 from renderer import write_video
 import multiprocessing
 
-def render_one_video(args, cam_num, write_video=0, save_npy=0):
+def render_one_video(args, cam_num, save_video=0, save_npy=0):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     if device=="cuda": torch.cuda.empty_cache()
 
@@ -97,7 +97,7 @@ def render_one_video(args, cam_num, write_video=0, save_npy=0):
             np.save(depth_save_path_, retva.comp_depth_map.cpu())
             print("save cam{:02} depth npy COMPLETED !".format(cam_num))
 
-        if write_video:
+        if save_video:
             retva.comp_rgb_map = retva.comp_rgb_map.clamp(0.0, 1.0)
             
             proc = multiprocessing.Process(target=write_video, args=(retva.comp_rgb_map.cpu(), savePath, 1, (None if nodepth else retva.comp_depth_map.cpu()), 30, 10,

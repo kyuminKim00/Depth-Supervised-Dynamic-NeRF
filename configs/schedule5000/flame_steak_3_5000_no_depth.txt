@@ -19,7 +19,7 @@ use_colmap_depth = 0
 dataset_name = llffvideo
 datadir = ../data/flame_steak_3/
 expname =  tensorf_flower_VM_coffe_small3_static_dynamic12
-basedir = ../log/cam3_depth_rgb_depth/
+basedir = ../log/cam3_depth_x__real/
 
 downsample_train = 4.0
 ndc_ray = 1

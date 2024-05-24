@@ -304,7 +304,7 @@ class LLFFVideoDataset(Dataset): #torch.utils.data의 Dataset 클래스를 상�
         if self.use_depth and self.use_colmap_depth: 
             self.read_depth_colmap()
 
-        elif self.use_depth and self.use_colmap_depth==0:
+        elif self.use_depth and (self.use_colmap_depth==0):
             self.depthmap = depthmap_path
             self.read_depthmap()
 

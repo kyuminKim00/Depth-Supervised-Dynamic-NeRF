@@ -12,15 +12,15 @@ lr_basis = 2e-3
 lr_dynamic_init = 0.03
 lr_dynamic_basis = 2e-3
 
-depth_lambda = 0.5
-use_depth = 0
+depth_lambda = 0.01
+use_depth = 1
 use_colmap_depth = 0
-depthmap_npy_path = /data2/kkm/km/data/21cam_static_only/depth/all_depth.npy
+depthmap_npy_path = /data2/kkm/km/data/21cam_static_only/depth/cam11/all_depth.npy
 
 dataset_name = llffvideo
-datadir = /data2/kkm/km/data/8cam
-expname =  tensorf_flower_VM_coffe_small3_static_dynamic12
-basedir = ../log/cam8_depth_0.5_6
+datadir = /data2/kkm/km/data/11cam
+expname =  exp
+basedir = ../log/cam11_depth_0.01
 
 downsample_train = 4.0
 ndc_ray = 1
