@@ -34,17 +34,28 @@ def cat_dic_list(list_of_dics, cat_dim=0):
     return ret_values
 
 
-def OctreeRender_trilinear_fast(rays, tensorf, std_train, chunk=4096, N_samples=-1, ndc_ray=False, white_bg=True, is_train=False, device='cuda', rgb_train=None,
-                                use_time='all', time=None, temporal_indices=None, static_branch_only=False, with_grad=True, simplify=False, remove_foreground=False, **kwargs):
+def OctreeRender_trilinear_fast(rays, depth, tensorf, std_train, chunk=4096, N_samples=-1, ndc_ray=False, white_bg=True, is_train=False, device='cuda', rgb_train=None,
+                                use_time='all', time=None, temporal_indices=None, static_branch_only=False, with_grad=True, simplify=False, remove_foreground=False, depth_sampling=False, **kwargs):
     # tiktok = TicTok()
     N_rays_all = rays.shape[0]
     return_values = []
     for chunk_idx in range(N_rays_all // chunk + int(N_rays_all % chunk > 0)):
         # tiktok.tik()
         rays_chunk = rays[chunk_idx * chunk:(chunk_idx + 1) * chunk].to(device)
-        current_values = tensorf(rays_chunk, is_train=is_train, white_bg=white_bg, ndc_ray=ndc_ray,
+        if depth_sampling:
+            depth = depth.mean(dim=1, keepdim=True)
+            depth = depth.squeeze(1)
+            depth_chunk = depth[chunk_idx * chunk:(chunk_idx + 1) * chunk].to(device)
+            current_values = tensorf(rays_chunk, depth_chunk, is_train=is_train, white_bg=white_bg, ndc_ray=ndc_ray,
                                     N_samples=N_samples, rgb_train=rgb_train, temporal_indices=temporal_indices,
                                  static_branch_only=static_branch_only, std_train=std_train,remove_foreground=remove_foreground, **kwargs)
+        else:
+            current_values = tensorf(rays_chunk, depth_chunk=None, is_train=is_train, white_bg=white_bg, ndc_ray=ndc_ray,
+                                    N_samples=N_samples, rgb_train=rgb_train, temporal_indices=temporal_indices,
+                                static_branch_only=static_branch_only, std_train=std_train,remove_foreground=remove_foreground, **kwargs)
+        
+        # args.model_name = TensorVMSplit
+        
         #여기에서 모델의 forward 함수 호출, 
         #rays_chunk로 ray의 묶음을 input으로 넣는다. 
 

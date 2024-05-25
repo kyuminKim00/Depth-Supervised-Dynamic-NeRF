@@ -11,6 +11,8 @@ def config_parser(cmd=None):
                     help='use depth in train step')
     parser.add_argument('--use_colmap_depth', type=int, default=0,
                     help='depth = COLMAP depth')
+    parser.add_argument('--depth_sampling', type=int, default=0,
+                    help='use depth sampling?')
     parser.add_argument('--depth_lambda', type=float, default=0.1,
                     help='depth weight')
     parser.add_argument('--cam_num', type=int, default=0,

@@ -312,8 +312,7 @@ class LLFFVideoDataset(Dataset): #torch.utils.data의 Dataset 클래스를 상�
 
         # self.near_far = [np.min(self.near_fars[:,0]),np.max(self.near_fars[:,1])]
         self.near_far = [near, far]
-        print("near_far", self.near_far)
-        
+                
         # self.scene_bbox = torch.tensor([[-1.5, -1.67, -1.0], [1.5, 1.67, 1.0]])
         # TODO
         # self.scene_bbox = torch.tensor([[-2.0, -2.0, -1.0], [2.0, 2.0, 1.0]])

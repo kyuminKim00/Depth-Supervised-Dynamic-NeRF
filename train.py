@@ -411,7 +411,7 @@ def reconstruction(args):
     eval_dynamics(args, tensorf, test_dataset, ndc_ray, nSamples, device)
     DynamicCriterion = Dynamics(args, device, use_volumetric_render=args.dynamic_use_volumetric_render)
     if args.temporal_sampler == 'simple':
-        print("=================SimpleTemporal========================") #정적인 영역 학습?
+        print("=================SimpleTemporal========================") 
         temporal_sampler = TemporalSampler(args.n_frames, args.n_train_frames)
         temporal_sampler_depth = TemporalSampler(args.n_frames, args.n_train_frames)
         
@@ -449,8 +449,8 @@ def reconstruction(args):
         temporal_indices, supervision_rgb_train = temporal_sampler.sample(rgb_train, iteration)
         if args.use_depth:
             rays_train_depth, depth_train = allrays_depth[ray_idx].to(device).float(), all_depth[ray_idx].to(device).float()
-       
-        #rgb_map, alphas_map, depth_map, weights, uncertainty
+            # depth_train (ray_idx, frames, 1)
+
         time_ = time.time()
         timing['pre'] = time_ - _time
 
@@ -467,12 +467,22 @@ def reconstruction(args):
             # print("temporal_indices", temporal_indices)
             # print("static_branch_only", args.static_branch_only)
 
-            retva = renderer(rays_train, tensorf, chunk=current_batch_size,
+            if args.depth_sampling and args.use_depth:
+                retva = renderer(rays_train, depth_train, tensorf, chunk=current_batch_size,
                                     N_samples=nSamples, white_bg = white_bg, ndc_ray=ndc_ray,
                                     device=device, is_train=True, rgb_train=rgb_train,
                                     temporal_indices=temporal_indices, static_branch_only=args.static_branch_only,
-                                    std_train=std_train, nodepth=False)
-            retva = Namespace(**retva)
+                                    std_train=std_train, nodepth=False, depth_sampling=args.depth_sampling)
+                retva = Namespace(**retva)
+            
+            else:
+                retva = renderer(rays_train, None, tensorf, chunk=current_batch_size,
+                                    N_samples=nSamples, white_bg = white_bg, ndc_ray=ndc_ray,
+                                    device=device, is_train=True, rgb_train=rgb_train,
+                                    temporal_indices=temporal_indices, static_branch_only=args.static_branch_only,
+                                    std_train=std_train, nodepth=False, depth_sampling=args.depth_sampling)
+                retva = Namespace(**retva)
+                
             ## print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=10))
 
 
@@ -540,33 +550,6 @@ def reconstruction(args):
                 else:
                     raise NotImplementedError
 
-
-                # ### depth로 RGB 규제 하는 경우 주석 해제###
-                # loss_static = 0
-                # if args.use_depth:
-                #     static_depth_supervision = depth_train.mean(dim=1)
-
-                #     for index, static_depth in enumerate(retva.static_depth_map):
-                #         one_depth_loss = abs(static_depth_supervision[index, 0] - static_depth)
-                #         one_rgb_loss = ((retva.static_rgb_map[index] - static_supervision[index])**2).mean() #args.static_loss == 'l2'
-                #         if one_depth_loss > args.margin:
-                #             one_ray_loss = (1 / torch.exp(0.5 + one_depth_loss)) * one_rgb_loss
-                #             loss_static += one_ray_loss
-                #         else:
-                #             loss_static += one_rgb_loss
-
-                # else:
-                #     if args.static_loss == 'l2':
-                #         loss_static = ((retva.static_rgb_map - static_supervision)**2).mean()
-
-                #     elif args.static_loss == 'l1':
-                #         loss_static = ((retva.static_rgb_map - static_supervision).abs()).mean()                    
-            
-                #     else:
-                #         raise NotImplementedError
-                
-            
-                ### depth로 RGB 규제 안하는 경우 주석 해제 ###
                 if args.static_loss == 'l2':
                     loss_static = ((retva.static_rgb_map - static_supervision)**2).mean()
 
@@ -698,11 +681,11 @@ def reconstruction(args):
             if args.use_depth:
                 depth_optimizer.zero_grad()
 
-                retva_depth = renderer(rays_train_depth, tensorf, chunk=current_batch_size,
+                retva_depth = renderer(rays_train_depth, None, tensorf, chunk=current_batch_size,
                                         N_samples=nSamples, white_bg = white_bg, ndc_ray=ndc_ray,
                                         device=device, is_train=True, rgb_train=None,
                                         temporal_indices=temporal_indices_depth, static_branch_only=args.static_branch_only,
-                                        std_train=None, nodepth=False)
+                                        std_train=None, nodepth=False, depth_sampling=False)
                 retva_depth = Namespace(**retva_depth)
                 static_depth_supervision = depth_train.mean(dim=1)
                 depth_loss = torch.mean((retva_depth.static_depth_map - static_depth_supervision)**2)

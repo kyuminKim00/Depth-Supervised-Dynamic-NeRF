@@ -360,15 +360,46 @@ class MixVoxels(torch.nn.Module):
             self.alphaMask = AlphaGridMask(self.device, ckpt['alphaMask.aabb'].to(self.device), alpha_volume.float().to(self.device))
         self.load_state_dict(ckpt['state_dict'])
 
-    def sample_ray_ndc(self, rays_o, rays_d, is_train=True, N_samples=-1): #ray를 N_samples개로 sampling해서 point위치 반환
-                                                                        #하나의 ray를 대상으로 sampling해서 각 point를 3D 텐서로 반환
+    def gaussian_sampling(self, mean, sigma, N_samples, max_val, min_val):
+        valid_samples = torch.empty(0)
+        std = sigma**0.5
+        while valid_samples.size(0) < N_samples:
+            temp_samples = torch.normal(mean, std, size=(1, N_samples * 4))  # 버퍼를 크게 잡아 한번에 많이 생성
+            temp_samples = temp_samples[(temp_samples >= min_val) & (temp_samples <= max_val)]
+            valid_samples = torch.cat((valid_samples, temp_samples))
+
+            if valid_samples.size(0) > N_samples:
+                valid_samples = valid_samples[:N_samples]
+        return valid_samples
+
+    def sample_ray_ndc(self, rays_o, rays_d, is_train=True, N_samples=-1): 
+                                                                        
         N_samples = N_samples if N_samples > 0 else self.nSamples
         near, far = self.near_far
+
         interpx = torch.linspace(near, far, N_samples).unsqueeze(0).to(rays_o)
         if is_train:
             interpx += torch.rand_like(interpx).to(rays_o) * ((far - near) / N_samples)
 
         rays_pts = rays_o[..., None, :] + rays_d[..., None, :] * interpx[..., None]
+        mask_outbbox = ((self.aabb[0] > rays_pts) | (rays_pts > self.aabb[1])).any(dim=-1)
+        return rays_pts, interpx, ~mask_outbbox
+
+    def sample_ray_ndc_depth(self, rays_o, rays_d, depth, is_train=True, N_samples=-1): 
+        N_samples = N_samples if N_samples > 0 else self.nSamples
+        near, far = self.near_far # [0, 1]
+        sigma = 0.15
+        rays_pts = []
+        if is_train:
+            for i in range(rays_o.shape[0]):
+                interpx = self.gaussian_sampling(float(depth[i]), sigma, N_samples, far, near)
+                interpx = interpx.to(self.device)
+                rays_pt = rays_o[i, None, :] + rays_d[i, None, :] * interpx[..., None]
+                rays_pts.append(rays_pt)
+        rays_pts = torch.stack(rays_pts)
+
+        interpx = torch.linspace(near, far, N_samples).unsqueeze(0).to(rays_o)
+        interpx += torch.rand_like(interpx).to(rays_o) * ((far - near) / N_samples)
         mask_outbbox = ((self.aabb[0] > rays_pts) | (rays_pts > self.aabb[1])).any(dim=-1)
         return rays_pts, interpx, ~mask_outbbox
 
@@ -570,7 +601,7 @@ class MixVoxels(torch.nn.Module):
     def forward_dynamics(self, rays_chunk, variance_train, is_train=False, ndc_ray=False, N_samples=-1, rgb_train=None):
         
         # sample points
-        xyz_sampled, z_vals, ray_valid, dists, viewdirs = self.sampling_points(rays_chunk, ndc_ray, is_train, N_samples)
+        xyz_sampled, z_vals, ray_valid, dists, viewdirs = self.sampling_points(rays_chunk, None, ndc_ray, is_train, N_samples)
         xyz_sampled = self.normalize_coord(xyz_sampled)
 
         # calculate pixel variance for weighted sampling
@@ -622,14 +653,18 @@ class MixVoxels(torch.nn.Module):
                 assert dynamic_granularity == 'ray_wise'
         return temporal_mask, dynamic_prediction
 
-    def forward(self, rays_chunk, std_train, white_bg=True, is_train=False, ndc_ray=False, N_samples=-1, rgb_train=None,
+    def forward(self, rays_chunk, depth_chunk, std_train, white_bg=True, is_train=False, ndc_ray=False, N_samples=-1, rgb_train=None,
                 temporal_indices=None, static_branch_only=False, remove_foreground=False, **kwargs):
         rays_chunk = rays_chunk.float()
         if std_train is not None:
             std_train = std_train.float()
         if static_branch_only:
-            xyz_sampled, z_vals, ray_valid, dists, viewdirs = self.sampling_points(rays_chunk, ndc_ray, is_train,
-                                                                                   N_samples)
+            if depth_chunk is None:
+                xyz_sampled, z_vals, ray_valid, dists, viewdirs = self.sampling_points(rays_chunk, None, ndc_ray, is_train,
+                                                                                    N_samples)
+            else:
+                xyz_sampled, z_vals, ray_valid, dists, viewdirs = self.sampling_points(rays_chunk, depth_chunk, ndc_ray, is_train,
+                                                                                    N_samples)
             xyz_sampled = self.normalize_coord(xyz_sampled)
             static_sigma, static_rgb, static_rgb_map, static_depth_map, static_fraction, valid_static_sigma, \
             static_alpha, static_weight, static_acc_map = \
@@ -644,14 +679,23 @@ class MixVoxels(torch.nn.Module):
                 'valid_static_sigma': valid_static_sigma,
             }
             return retva
-        return self.forward_seperatly(rays_chunk, std_train, white_bg, is_train, ndc_ray, N_samples, rgb_train, temporal_indices=temporal_indices, **kwargs)
-
-    def sampling_points(self, rays_chunk, ndc_ray, is_train, N_samples, alpha_filte=True):
+        if depth_chunk is not None:
+            return self.forward_seperatly(rays_chunk, depth_chunk, std_train, white_bg, is_train, ndc_ray, N_samples, rgb_train, temporal_indices=temporal_indices, **kwargs)
+        else:
+            return self.forward_seperatly(rays_chunk, None, std_train, white_bg, is_train, ndc_ray, N_samples, rgb_train, temporal_indices=temporal_indices, **kwargs)
+            
+    def sampling_points(self, rays_chunk, depth_chunk, ndc_ray, is_train, N_samples, alpha_filte=True):
         # sample points
         viewdirs = rays_chunk[:, 3:6]
         if ndc_ray:
-            xyz_sampled, z_vals, ray_valid = self.sample_ray_ndc(rays_chunk[:, :3], viewdirs, is_train=is_train,
-                                                                 N_samples=N_samples)
+            if depth_chunk is None:
+                xyz_sampled, z_vals, ray_valid = self.sample_ray_ndc(rays_chunk[:, :3], viewdirs, is_train=is_train,
+                                                                    N_samples=N_samples)
+            else:
+                depth = depth_chunk
+                xyz_sampled, z_vals, ray_valid = self.sample_ray_ndc_depth(rays_chunk[:, :3], viewdirs, depth, is_train=is_train,
+                                                                    N_samples=N_samples)
+
             dists = torch.cat((z_vals[:, 1:] - z_vals[:, :-1], torch.zeros_like(z_vals[:, :1])), dim=-1)
             rays_norm = torch.norm(viewdirs, dim=-1, keepdim=True)
             dists = dists * rays_norm
@@ -738,7 +782,7 @@ class MixVoxels(torch.nn.Module):
         return static_sigma, static_rgb, static_rgb_map, static_depth_map, static_fraction, valid_static_sigma, \
                static_alpha, static_weight, static_acc_map
 
-    def forward_seperatly(self, rays_chunk, std_train, white_bg=True, is_train=False, ndc_ray=False, N_samples=-1,
+    def forward_seperatly(self, rays_chunk, depth_chunk, std_train, white_bg=True, is_train=False, ndc_ray=False, N_samples=-1,
                           rgb_train=None, composite_by_points=False, temporal_indices=None, diff_calc=False,
                           render_path=False, nodepth=False):
         #이게 static_branch + dynamic_branch 학습
@@ -747,7 +791,12 @@ class MixVoxels(torch.nn.Module):
         # if self.dynamic_granularity == 'point_wise':
         #     rgb_train = None
             # assert rgb_train is None
-        xyz_sampled, z_vals, ray_valid, dists, viewdirs = self.sampling_points(rays_chunk, ndc_ray, is_train, N_samples)
+        if depth_chunk is None:
+            xyz_sampled, z_vals, ray_valid, dists, viewdirs = self.sampling_points(rays_chunk, None, ndc_ray, is_train,
+                                                                                    N_samples)
+        else:
+             xyz_sampled, z_vals, ray_valid, dists, viewdirs = self.sampling_points(rays_chunk, depth_chunk, ndc_ray, is_train,
+                                                                                    N_samples)
         xyz_sampled = self.normalize_coord(xyz_sampled)
         # temporal mask
         num_frames = self.n_frames if temporal_indices is None else self.n_train_frames
