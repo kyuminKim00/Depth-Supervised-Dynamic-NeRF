@@ -669,7 +669,7 @@ def reconstruction(args):
 
         _time = time.time()
         timing['backward'] = _time - time_
-        # print(timing)
+        #print(timing)
         
         if args.use_depth:
             rays_train_depth, depth_train = allrays_depth[ray_idx].to(device).float(), all_depth[ray_idx].to(device).float()

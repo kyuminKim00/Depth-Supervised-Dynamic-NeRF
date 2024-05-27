@@ -12,21 +12,21 @@ lr_basis = 2e-3
 lr_dynamic_init = 0.03
 lr_dynamic_basis = 2e-3
 
-depth_lambda = 0.5
+depth_lambda = 0.01
 use_depth = 1
 use_colmap_depth = 0
-depthmap_npy_path = /data2/kkm/km/data/21cam_static_only/depth/cam8/all_depth.npy
 depth_sampling = 1
-
+depthmap_npy_path = /data2/kkm/km/data/flame_steak_static_only_new/depth/all_depth.npy
 
 dataset_name = llffvideo
-datadir = /data2/kkm/km/data/8cam
+datadir = /data2/kkm/km/data/flame_steak_3
 expname =  tensorf_flower_VM_coffe_small3_static_dynamic12
-basedir = ../log/cam8_depth_0.5_depthsampling
+basedir = /data2/kkm/km/log/cam3_depth_sampling_25000
+
 downsample_train = 4.0
 ndc_ray = 1
 
-n_iters = 5000
+n_iters = 25000
 batch_size = 216
 batch_factor = [8,8,2,1]
 featureC = 512

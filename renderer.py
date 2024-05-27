@@ -117,7 +117,7 @@ def evaluation(test_dataset, tensorf, args, renderer, savePath=None, N_vis=5, pr
         W, H = test_dataset.img_wh
         rays = samples.view(-1, samples.shape[-1])
 
-        retva = renderer(rays, tensorf,  std_train=None, chunk=args.batch_size//2, N_samples=N_samples, ndc_ray=ndc_ray, white_bg = white_bg, device=device, with_grad=False,
+        retva = renderer(rays, None, tensorf, std_train=None, chunk=args.batch_size//2, N_samples=N_samples, ndc_ray=ndc_ray, white_bg = white_bg, device=device, with_grad=False,
                          simplify=simplify, static_branch_only=static_branch_only, remove_foreground=remove_foreground)
         print("renderer Done")
         retva = Namespace(**retva)
@@ -299,7 +299,7 @@ def evaluation_path(test_dataset, tensorf, args, c2ws, renderer, savePath=None, 
         rays = torch.cat([rays_o, rays_d], 1)  # (h*w, 6)
 
         tictok.tik_print('pre-render')
-        retva = renderer(rays, tensorf, std_train=None, chunk=args.batch_size*4, N_samples=N_samples,
+        retva = renderer(rays, None, tensorf, std_train=None, chunk=args.batch_size*4, N_samples=N_samples,
                          ndc_ray=ndc_ray, white_bg = white_bg, device=device, with_grad=False,
                          simplify=True, static_branch_only=static_branch_only, temporal_indices=temporal_indices,
                          remove_foreground=remove_foreground, diff_calc=False, render_path=True, nodepth=nodepth)

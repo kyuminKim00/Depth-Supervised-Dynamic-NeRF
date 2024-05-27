@@ -86,7 +86,7 @@ def render_one_video(args, cam_num, save_video=0, save_npy=0):
 
             print('pre-render')
 
-            retva = renderer(rays, tensorf, std_train=None, chunk=args.batch_size*4, N_samples=-1,
+            retva = renderer(rays, None, tensorf, std_train=None, chunk=args.batch_size*4, N_samples=-1,
                                     ndc_ray=args.ndc_ray, white_bg = False, device=device, with_grad=False,
                                     simplify=True, static_branch_only=False, temporal_indices=temporal_indices,
                                     remove_foreground=False, diff_calc=False, render_path=True, nodepth=False)
