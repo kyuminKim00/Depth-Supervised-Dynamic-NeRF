@@ -3,16 +3,16 @@ from render_one_video import *
 if __name__=='__main__':
     args = config_parser()
     data_dir = args.datadir
-    depth_dir = data_dir +"/depth/cam11"
+    depth_dir = data_dir +"/depth/"
     print(depth_dir)
     print(args.cam_num_list)
 
-    # for i in args.cam_num_list:
-    #     if i == " ":
-    #         pass
-    #     else:
-    #         print("cam_num :", i )
-    #         render_one_video(args, int(i), 0, 1)
+    for i in args.cam_num_list:
+        if i == " ":
+            pass
+        else:
+            print("cam_num :", i )
+            render_one_video(args, int(i), 0, 1)
     
     depth_npy_path = [os.path.join(depth_dir, file) for file in os.listdir(depth_dir) if file.endswith('.npy')]
     depth_npy_path = sorted(depth_npy_path)

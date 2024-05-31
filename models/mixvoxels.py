@@ -360,9 +360,8 @@ class MixVoxels(torch.nn.Module):
             self.alphaMask = AlphaGridMask(self.device, ckpt['alphaMask.aabb'].to(self.device), alpha_volume.float().to(self.device))
         self.load_state_dict(ckpt['state_dict'])
 
-    def gaussian_sampling(self, mean, sigma, N_samples, max_val, min_val):
+    def gaussian_sampling(self, mean, std, N_samples, max_val, min_val):
         valid_samples = torch.empty(0)
-        std = sigma**0.5
         while valid_samples.size(0) < N_samples:
             temp_samples = torch.normal(mean, std, size=(1, N_samples * 4))  # 버퍼를 크게 잡아 한번에 많이 생성
             temp_samples = temp_samples[(temp_samples >= min_val) & (temp_samples <= max_val)]
@@ -388,11 +387,11 @@ class MixVoxels(torch.nn.Module):
     def sample_ray_ndc_depth(self, rays_o, rays_d, depth, is_train=True, N_samples=-1): 
         N_samples = N_samples if N_samples > 0 else self.nSamples
         near, far = self.near_far # [0, 1]
-        sigma = 0.15
+        std = 0.3
         rays_pts = []
         if is_train:
             for i in range(rays_o.shape[0]):
-                interpx = self.gaussian_sampling(float(depth[i]), sigma, N_samples, far, near)
+                interpx = self.gaussian_sampling(float(depth[i]), std, N_samples, far, near)
                 interpx = interpx.to(self.device)
                 rays_pt = rays_o[i, None, :] + rays_d[i, None, :] * interpx[..., None]
                 rays_pts.append(rays_pt)
