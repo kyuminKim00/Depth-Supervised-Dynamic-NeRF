@@ -3,19 +3,19 @@
 #### Distill static model depth to Dynamic model ####
 
 --- 
-### Result ###
+## RESULT ##
 <p align="center">
   <img src="https://github.com/kyuminKim00/Depth-Supervised-Dynamic-NeRF/assets/112574294/82530f3e-c22e-4088-93f2-3cf18658b45e" width="700" height="auto">
 </p>
 
 --- 
-### Pipeline ###
+## PIPELINE ##
 <p align="center">
   <img src="https://github.com/kyuminKim00/Depth-Supervised-Dynamic-NeRF/assets/112574294/26aa842d-1aad-42c7-b341-a0c9ae5b68d1" width="800" height="auto">
 </p>
 
 --- 
-### Campare ###
+## COMPARISON ##
 <p align="center">
   <img src="https://github.com/kyuminKim00/Depth-Supervised-Dynamic-NeRF/assets/112574294/f8aa01d1-5c41-4316-95b2-02c6fd5369ae" width="500" height="auto">
 </p>
