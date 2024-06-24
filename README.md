@@ -107,7 +107,7 @@ data
 |poses_bounds.npy  
 
 7. TRAIN  
-'''
+'''python
   python train.py --config [config] render_path 0 --use_depth 1  
 '''
 
