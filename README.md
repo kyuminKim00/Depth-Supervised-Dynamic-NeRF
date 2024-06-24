@@ -28,24 +28,29 @@
 2. static data dir 구성
 static_dir<br/>
 |frames_?<br/>
-  |cam00<br/>
-    |0.jpg, 1.jpg, ...<br/>
-  |cam01...<br/>
+&emsp;|cam00<br/>
+&emsp;&emsp;|0.jpg, 1.jpg, ...<br/>
+&emsp;|cam01...<br/>
 
-3. python prepare_static.py --static_data_path [data_path] --frame_num [n_frames]  
+3. static data 준비<br/>
+'''
+python prepare_static.py --static_data_path [data_path] --frame_num [n_frames]  
+'''
 
 4. static config file 만들기  
 
 5. static model 학습  
+'''
   python train --config [static_config_path] --render_path 0
+'''
 
 ### Dynamic model 학습 ###
 5. Dynamic data dir 구성<br/>
 dynamic_dir<br/>
 |frames_?<br/>
-  cam00<br/>
-    |0.jpg, 1.jpg, ...<br/>
-  |cam01... (카메라 위치 당 N frames)<br/>
+&emsp;|cam00<br/>
+&emsp;&emsp;|0.jpg, 1.jpg, ...<br/>
+&emsp;|cam01... (카메라 위치 당 N frames)<br/>
 |depth<br/>
 |poses_bounds.npy<br/>
 
@@ -53,11 +58,15 @@ dynamic_dir<br/>
   depthmap_npy_path 에 5번에서 생성한 all_depth.npy 경로 설정
 
 7. 학습한 static model로 depth 추출  
+'''
   python static_model2depth.py --config [dynamic_config_path] --ckpt [static_model_ckpt_path] --cam_num_list [cam1 cam2 ...]
   inference cam 제외(inference cam은 학습에 사용되지 않아서 depth 추출할 필요 없음)
+'''
 
 8. dynamic model 학습  
+'''
   python train.py --config [dynamic_config_path] --render_path 0
+'''
 
 ---  
 
@@ -66,38 +75,47 @@ dynamic_dir<br/>
 데이터중에 cam0는 testset, 나머지는 trainset, cam0 depth, rgb는 훈련에서 사용하지 않음
 
 2. 비디오를 프레임 단위로 자르기  
+'''
   python tools/prepare_video.py [data_dir]  
-
+'''
 3. 각 카메라마다 이미지 한 장씩 새로운 폴더에 넣어서 colmap 실행  
 카메라 포즈, colmap depth 추출
 
 4. colmap 실행한 폴더를 사용해서 imgs2poses.py 실행(LLFF 코드 참조) -> poses_bounds.npy 파일 생성  
+'''
   python imgs2poses.py [data_dir] 
+'''
 
 5. colmap 실행한 폴더를 사용해서 colmap2depth.py 실행 -> colmap_depth.npy 파일 생성
+'''
   python colmap2depth.py [data_dir]  
+'''
 
 6. 생성된 poses_bounds.npy, colmap_depth.npy 파일을 기존의 데이터 디렉토리에 이동  
 디렉토리 구성  
 data  
 |frames  
-　　|cam00, cam01, cam02, ...  
+&emsp;|cam00, cam01, cam02, ...  
 |videos  
-　　|cam00, cam01, cam02, ...  
+&emsp;|cam00, cam01, cam02, ...  
 |images  
-　　|1.jpg, 2.jpg, ..., (colmap 실행할 때 사용한 이미지, 카메라 당 하나)  
+&emsp;|1.jpg, 2.jpg, ..., (colmap 실행할 때 사용한 이미지, 카메라 당 하나)  
 |sparse  
-　　|0  
-　　　　|cameras.bin, images.bin, points3D.bin  
+&emsp;|0  
+&emsp;&emsp;|cameras.bin, images.bin, points3D.bin  
 |colmap_depth.npy  
 |poses_bounds.npy  
 
 7. TRAIN  
+'''
   python train.py --config [config] render_path 0 --use_depth 1  
+'''
 
 ---  
 - 하나의 view에서 동영상 렌더링   
+'''
   python render_one_video.py --config [config file path] --ckpt [checkpoint path] --cam_num [rendering cam number]
+'''
 ## Reference 
 1. [ICCV2023 Oral] MixVoxels: Mixed Neural Voxels for Fast Multi-view Video Synthesis   
 [Project Page](https://fengres.github.io/mixvoxels/) 
