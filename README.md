@@ -1,5 +1,21 @@
-# MixvVoxels With DEPTH #  
+# Depth-Supervised Dynamic NeRF #  
+MixVoxels with depth
 Distill static model depth to Dynamic model 
+<p align="center">
+  <img src="https://github.com/kyuminKim00/Depth-Supervised-Dynamic-NeRF/assets/112574294/fd635b10-fbf2-472d-9649-1a477adecde7">
+</p>
+
+<p align="center">
+  <img src="https://github.com/kyuminKim00/Depth-Supervised-Dynamic-NeRF/assets/112574294/26aa842d-1aad-42c7-b341-a0c9ae5b68d1">
+</p>
+
+<p align="center">
+  <img src="https://github.com/kyuminKim00/Depth-Supervised-Dynamic-NeRF/assets/112574294/f8aa01d1-5c41-4316-95b2-02c6fd5369ae">
+</p>
+![파이프라인](https://github.com/kyuminKim00/Depth-Supervised-Dynamic-NeRF/assets/112574294/26aa842d-1aad-42c7-b341-a0c9ae5b68d1)
+
+![결과](https://github.com/kyuminKim00/Depth-Supervised-Dynamic-NeRF/assets/112574294/f8aa01d1-5c41-4316-95b2-02c6fd5369ae)
+
 
 ## 실행 방법 ##
 ### Static model 만들기 ###
