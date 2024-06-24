@@ -1,14 +1,19 @@
 # Depth-Supervised Dynamic NeRF #  
-MixVoxels with depth
-Distill static model depth to Dynamic model 
-###
+### MixVoxels with depth ###
+#### Distill static model depth to Dynamic model ####
+
+--- 
 <p align="center">
-  <img src="https://github.com/kyuminKim00/Depth-Supervised-Dynamic-NeRF/assets/112574294/fd635b10-fbf2-472d-9649-1a477adecde7" width="500" height="auto">
+  <img src="https://github.com/kyuminKim00/Depth-Supervised-Dynamic-NeRF/assets/112574294/82530f3e-c22e-4088-93f2-3cf18658b45e" width="700" height="auto">
 </p>
 
+--- 
+
 <p align="center">
-  <img src="https://github.com/kyuminKim00/Depth-Supervised-Dynamic-NeRF/assets/112574294/26aa842d-1aad-42c7-b341-a0c9ae5b68d1" width="500" height="auto">
+  <img src="https://github.com/kyuminKim00/Depth-Supervised-Dynamic-NeRF/assets/112574294/26aa842d-1aad-42c7-b341-a0c9ae5b68d1" width="800" height="auto">
 </p>
+
+--- 
 
 <p align="center">
   <img src="https://github.com/kyuminKim00/Depth-Supervised-Dynamic-NeRF/assets/112574294/f8aa01d1-5c41-4316-95b2-02c6fd5369ae" width="500" height="auto">
