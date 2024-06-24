@@ -26,11 +26,11 @@
 1. 하나의 카메라로 장면 이미지 얻기(카메라 위치 당 이미지 1장)  
 
 2. static data dir 구성
-data  
-|frames  
-    |cam00|cam00.png 
-    |cam01|cam01.png  
-    |cam02|cam02.png ... 
+static_dir<br/>
+|frames_?<br/>
+  |cam00<br/>
+    |0.jpg, 1.jpg, ...<br/>
+  |cam01...<br/>
 
 3. python prepare_static.py --static_data_path [data_path] --frame_num [n_frames]  
 
@@ -39,16 +39,24 @@ data
 5. static model 학습  
   python train --config [static_config_path] --render_path 0
 
-5. 학습한 static model로 depth 추출  
-  python static_model2depth.py --config [static_config_path] --ckpt [static_model_ckpt_path] --cam_num_list [cam1 cam2 ...]
-  inference cam 제외(inference cam은 학습에 사용되지 않아서 depth 추출할 필요 없음)
-
-
 ### Dynamic model 학습 ###
+5. Dynamic data dir 구성<br/>
+dynamic_dir<br/>
+|frames_?<br/>
+  cam00<br/>
+    |0.jpg, 1.jpg, ...<br/>
+  |cam01... (카메라 위치 당 N frames)<br/>
+|depth<br/>
+|poses_bounds.npy<br/>
+
 6. dynamic config file 만들기  
   depthmap_npy_path 에 5번에서 생성한 all_depth.npy 경로 설정
 
-7. dynamic model 학습  
+7. 학습한 static model로 depth 추출  
+  python static_model2depth.py --config [dynamic_config_path] --ckpt [static_model_ckpt_path] --cam_num_list [cam1 cam2 ...]
+  inference cam 제외(inference cam은 학습에 사용되지 않아서 depth 추출할 필요 없음)
+
+8. dynamic model 학습  
   python train.py --config [dynamic_config_path] --render_path 0
 
 ---  
