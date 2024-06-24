@@ -41,7 +41,7 @@ python prepare_static.py --static_data_path [data_path] --frame_num [n_frames]
 
 5. static model 학습  
 ```
-  python train --config [static_config_path] --render_path 0
+python train --config [static_config_path] --render_path 0
 ```
 
 ### Dynamic model 학습 ###
@@ -59,13 +59,13 @@ dynamic_dir<br/>
 
 7. 학습한 static model로 depth 추출  
 ```
-  python static_model2depth.py --config [dynamic_config_path] --ckpt [static_model_ckpt_path] --cam_num_list [cam1 cam2 ...]
-  inference cam 제외(inference cam은 학습에 사용되지 않아서 depth 추출할 필요 없음)
+python static_model2depth.py --config [dynamic_config_path] --ckpt [static_model_ckpt_path] --cam_num_list [cam1 cam2 ...]
 ```
+inference cam 제외(inference cam은 학습에 사용되지 않아서 depth 추출할 필요 없음)
 
 8. dynamic model 학습  
 ```
-  python train.py --config [dynamic_config_path] --render_path 0
+python train.py --config [dynamic_config_path] --render_path 0
 ```
 
 ---  
@@ -76,19 +76,19 @@ dynamic_dir<br/>
 
 2. 비디오를 프레임 단위로 자르기  
 ```
-  python tools/prepare_video.py [data_dir]  
+python tools/prepare_video.py [data_dir]  
 ```
 3. 각 카메라마다 이미지 한 장씩 새로운 폴더에 넣어서 colmap 실행  
 카메라 포즈, colmap depth 추출
 
 4. colmap 실행한 폴더를 사용해서 imgs2poses.py 실행(LLFF 코드 참조) -> poses_bounds.npy 파일 생성  
 ```
-  python imgs2poses.py [data_dir] 
+python imgs2poses.py [data_dir] 
 ```
 
 5. colmap 실행한 폴더를 사용해서 colmap2depth.py 실행 -> colmap_depth.npy 파일 생성
 ```
-  python colmap2depth.py [data_dir]  
+python colmap2depth.py [data_dir]  
 ```
 
 6. 생성된 poses_bounds.npy, colmap_depth.npy 파일을 기존의 데이터 디렉토리에 이동  
@@ -108,13 +108,13 @@ data
 
 7. TRAIN  
 ```
-  python train.py --config [config] render_path 0 --use_depth 1  
+python train.py --config [config] render_path 0 --use_depth 1  
 ```
 
 ---  
 - 하나의 view에서 동영상 렌더링   
 ```
-  python render_one_video.py --config [config file path] --ckpt [checkpoint path] --cam_num [rendering cam number]
+python render_one_video.py --config [config file path] --ckpt [checkpoint path] --cam_num [rendering cam number]
 ```
 ## Reference 
 1. [ICCV2023 Oral] MixVoxels: Mixed Neural Voxels for Fast Multi-view Video Synthesis   
